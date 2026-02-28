@@ -1,0 +1,108 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "IncliArray",
+  "projectDescription": "Minimal NumPy-like N-dimensional float array library in C++ with autograd support.",
+  "theme": "aspen",
+  "primaryColor": "#4B8BBE",
+  "lightColor": null,
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/arrays",
+              "concepts/shapes-strides",
+              "concepts/ownership",
+              "concepts/autograd"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/array-creation",
+              "guides/indexing-slicing",
+              "guides/operations",
+              "guides/broadcasting",
+              "guides/matrix-multiplication",
+              "guides/autograd-backprop"
+            ]
+          },
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/basic-scalar",
+              "examples/basic-vectors",
+              "examples/neural-network"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "NDArray Class",
+            "pages": [
+              "api/constructor",
+              "api/properties",
+              "api/indexing",
+              "api/initialization",
+              "api/arithmetic",
+              "api/operations",
+              "api/autograd",
+              "api/utilities"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "N-dimensional float arrays with row-major layout",
+    "Broadcasting arithmetic operations",
+    "Lightweight reverse-mode autograd",
+    "Array slicing and views",
+    "Shape manipulation and reshaping",
+    "2D matrix multiplication",
+    "Reduction operations",
+    "Multiple initialization methods"
+  ],
+  "publicApiSurface": [
+    "NDArray(std::vector<int> shape)",
+    "get(std::vector<int> indices)",
+    "set(std::vector<int> indices, float value)",
+    "slice(std::vector<std::tuple<int, int>> indices)",
+    "reshape(std::vector<int> newShape)",
+    "clone()",
+    "zeros()",
+    "ones()",
+    "fill(float value)",
+    "fillSequential()",
+    "rand()",
+    "randint(int low, int high)",
+    "operator+(NDArray& other)",
+    "operator-(NDArray& other)",
+    "operator*(NDArray& other)",
+    "operator/(NDArray& other)",
+    "operator^(float value)",
+    "element_wise_multiply(NDArray& other)",
+    "sum()",
+    "sum(int axis)",
+    "backward()",
+    "print()",
+    "metadata()",
+    "isContiguous()"
+  ]
+}
