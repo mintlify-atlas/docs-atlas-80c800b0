@@ -1,0 +1,336 @@
+---
+title: Memory ownership
+description: Understanding IncliArray's memory ownership model and when arrays own vs. share data
+---
+
+IncliArray has an explicit memory ownership model controlled by the `ownsData` flag. This determines whether an array manages its own memory or shares it with another array.
+
+## The ownsData flag
+
+Every NDArray has a boolean `ownsData` field that determines memory management:
+
+```cpp
+NDArray base({3, 4});
+base.ownsData;  // true - allocated its own memory
+
+NDArray view = base.slice({{0, 2}, {0, 3}});
+view.ownsData;  // false - shares memory with base
+```
+
+<Info>
+Only arrays with `ownsData == true` allocate and deallocate memory. Views never own memory.
+</Info>
+
+## Base arrays vs views
+
+### Base arrays (owning)
+
+Created using the public constructor:
+
+```cpp
+// Public constructor creates owning array
+NDArray X({2, 3});
+// - Allocates data buffer (6 floats)
+// - Allocates grad buffer (6 floats)
+// - Sets ownsData = true
+// - Computes row-major strides {3, 1}
+```
+
+Base arrays:
+- Allocate their own memory
+- Deallocate memory in destructor
+- Can participate in autograd
+- Support all operations
+
+### Views (non-owning)
+
+Created by operations like `slice()`:
+
+```cpp
+NDArray original({4, 5});
+original.fillSequential();
+
+// slice() creates a non-owning view
+NDArray view = original.slice({{1, 3}, {1, 4}});
+// - Shares data pointer with original
+// - Has its own shape and strides
+// - Sets ownsData = false
+// - Detached from autograd
+```
+
+<Warning>
+The view's lifetime must not exceed the base array's lifetime. Once the base array is destroyed, the view's data pointer becomes invalid.
+</Warning>
+
+## When memory is allocated vs shared
+
+### Memory allocation
+
+Memory is allocated when:
+
+1. **Creating a base array**:
+   ```cpp
+   NDArray X({3, 4});  // Allocates 12 floats + 12 floats for gradients
+   ```
+
+2. **Cloning an array**:
+   ```cpp
+   NDArray original({2, 3});
+   NDArray copy = original.clone();  // Allocates new memory
+   copy.ownsData;  // true
+   ```
+
+3. **Arithmetic operations** (result is a new owning array):
+   ```cpp
+   NDArray A({2, 3}), B({2, 3});
+   NDArray C = A + B;  // C owns its data
+   C.ownsData;  // true
+   ```
+
+### Memory sharing
+
+Memory is shared when:
+
+1. **Slicing**:
+   ```cpp
+   NDArray base({4, 5});
+   NDArray view = base.slice({{1, 3}, {1, 4}});
+   view.ownsData;  // false
+   ```
+
+2. **Manual view creation** (internal constructor):
+   ```cpp
+   // Internal constructor (private API)
+   // Used by slice() implementation
+   ```
+
+## Operations on non-owning arrays
+
+### Allowed operations
+
+Views support most read operations:
+
+```cpp
+NDArray original({3, 4});
+original.fillSequential();
+NDArray view = original.slice({{0, 2}, {0, 3}});
+
+// Reading
+float val = view.get({1, 2});  // ✓ OK
+
+// Printing
+view.print();  // ✓ OK
+
+// Metadata
+view.metadata(true, true, true);  // ✓ OK
+
+// Setting individual elements
+view.set({0, 1}, 42.0f);  // ✓ OK (modifies original!)
+
+// Arithmetic (creates new owning array)
+NDArray result = view + 10;  // ✓ OK
+result.ownsData;  // true
+```
+
+### Restricted operations
+
+Views cannot modify the underlying buffer structure:
+
+```cpp
+NDArray original({3, 4});
+NDArray view = original.slice({{0, 2}, {0, 3}});
+
+// These operations throw runtime_error:
+view.fill(42.0f);        // ✗ Error
+view.fillSequential();   // ✗ Error
+view.zeros();            // ✗ Error
+view.ones();             // ✗ Error
+view.rand();             // ✗ Error
+view.randint(1, 10);     // ✗ Error
+```
+
+<Warning>
+Bulk fill operations like `fill()`, `rand()`, and `fillSequential()` only work on owning arrays. Call `clone()` first if you need to fill a view.
+</Warning>
+
+## slice() creates non-owning views
+
+The `slice()` method creates views that share memory:
+
+```cpp
+NDArray matrix({4, 5});
+matrix.fillSequential();
+
+// Create a view of rows 1-2, columns 1-3
+NDArray view = matrix.slice({{1, 3}, {1, 4}});
+
+// Verify ownership
+std::cout << "View owns data? " 
+          << (view.ownsData ? "yes" : "no") << std::endl;
+// Output: View owns data? no
+
+// Modifying view affects original
+view.set({0, 0}, 999.0f);
+float original_val = matrix.get({1, 1});  // 999.0
+```
+
+From `include/NDArray.h:153-165`:
+
+```cpp
+/**
+ * @brief Return a non‑owning view restricted by per‑axis [start, stop)
+ * slices.
+ *
+ * The returned NDArray shares `data` with the base tensor and has updated
+ * shape/strides/offset. It is DETACHED from autograd: no graph is recorded
+ * and its `_backward` is a no‑op.
+ */
+NDArray slice(std::vector<std::tuple<int, int>> indices);
+```
+
+## clone() creates owning copies
+
+The `clone()` method creates an independent copy:
+
+```cpp
+NDArray original({3, 4});
+original.fillSequential();
+
+// Clone creates owning copy
+NDArray copy = original.clone();
+
+// Verify ownership
+copy.ownsData;  // true
+
+// Modifying copy doesn't affect original
+copy.set({0, 0}, 999.0f);
+float original_val = original.get({0, 0});  // 0.0 (unchanged)
+```
+
+From `include/NDArray.h:336-342`:
+
+```cpp
+/**
+ * @brief Materialize a contiguous, owning copy. Detached from autograd.
+ *
+ * If the source is contiguous, performs a fast contiguous copy; otherwise
+ * uses a stride‑aware copy. The returned tensor has no graph linkage.
+ */
+NDArray clone();
+```
+
+<Info>
+`clone()` creates a contiguous copy even if the source is non-contiguous. The result always owns its data and can be used with all operations.
+</Info>
+
+## Safety constraints
+
+### Lifetime management
+
+Views must not outlive their base array:
+
+```cpp
+NDArray* createView() {
+    NDArray base({3, 4});  // Stack allocation
+    base.fillSequential();
+    
+    NDArray view = base.slice({{0, 2}, {0, 3}});
+    return &view;  // ✗ DANGER: base destroyed, view's data is invalid
+}
+```
+
+<Warning>
+Always ensure the base array remains alive while views exist. Consider using `clone()` when transferring ownership or returning from functions.
+</Warning>
+
+### Safe patterns
+
+```cpp
+// Pattern 1: Both in same scope
+void processSubmatrix() {
+    NDArray matrix({10, 10});
+    matrix.fillSequential();
+    
+    NDArray view = matrix.slice({{2, 5}, {3, 7}});
+    // Use view...
+    // Both destroyed at end of scope ✓
+}
+
+// Pattern 2: Clone when transferring ownership
+NDArray extractSubmatrix(NDArray& matrix) {
+    NDArray view = matrix.slice({{2, 5}, {3, 7}});
+    return view.clone();  // ✓ Safe: returns owning copy
+}
+
+// Pattern 3: Use references when possible
+void processView(NDArray& view) {
+    // Work with view passed by reference
+    view.print();
+    // Caller ensures base array lifetime ✓
+}
+```
+
+## Real-world example
+
+Here's an example demonstrating ownership:
+
+```cpp
+#include "NDArray.h"
+#include <iostream>
+
+int main() {
+    // Create owning array
+    NDArray matrix({4, 5});
+    matrix.fillSequential();
+    
+    std::cout << "Matrix owns data? " 
+              << (matrix.ownsData ? "yes" : "no") << std::endl;
+    // Output: yes
+    
+    // Create view (non-owning)
+    NDArray view = matrix.slice({{1, 3}, {1, 4}});
+    std::cout << "View owns data? " 
+              << (view.ownsData ? "yes" : "no") << std::endl;
+    // Output: no
+    
+    // Create clone (owning)
+    NDArray copy = view.clone();
+    std::cout << "Clone owns data? " 
+              << (copy.ownsData ? "yes" : "no") << std::endl;
+    // Output: yes
+    
+    // Demonstrate shared memory
+    view.set({0, 0}, 999.0f);
+    std::cout << "\nAfter modifying view:" << std::endl;
+    std::cout << "Matrix[1,1] = " << matrix.get({1, 1}) << std::endl;  // 999.0
+    std::cout << "View[0,0] = " << view.get({0, 0}) << std::endl;      // 999.0
+    std::cout << "Clone[0,0] = " << copy.get({0, 0}) << std::endl;     // 6.0 (unchanged)
+    
+    return 0;
+}
+```
+
+## Key insights
+
+<Accordion title="Why explicit ownership?">
+Explicit ownership makes memory management predictable in C++. You always know whether an array manages its own memory or shares it, avoiding hidden allocations and lifetime issues.
+</Accordion>
+
+<Accordion title="When should I use clone() vs slice()?">
+Use `slice()` when you need a temporary view for reading or when you know the base array will outlive the view. Use `clone()` when you need an independent copy, need to use fill operations, or are returning from a function.
+</Accordion>
+
+<Accordion title="Can views participate in autograd?">
+No. Views created by `slice()` are explicitly detached from the autograd graph. If you need autograd support, use `clone()` to create an owning copy that can participate in the computation graph.
+</Accordion>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Autograd" href="/concepts/autograd" icon="brain">
+    Learn about automatic differentiation
+  </Card>
+  <Card title="API Reference" href="/api/constructor" icon="code">
+    Explore the complete NDArray API
+  </Card>
+</CardGroup>

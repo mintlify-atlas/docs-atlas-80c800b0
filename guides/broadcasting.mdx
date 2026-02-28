@@ -1,0 +1,296 @@
+---
+title: Broadcasting
+description: Understand broadcasting rules for operations between arrays of different shapes
+---
+
+## What is Broadcasting?
+
+Broadcasting allows operations between arrays of different shapes by automatically expanding dimensions. This eliminates the need for manual replication.
+
+```cpp
+// Without broadcasting, you'd need to manually repeat:
+// [1, 2, 3] + [10] -> [1, 2, 3] + [10, 10, 10]
+
+// With broadcasting:
+NDArray a({3});
+a.fillSequential();  // [0, 1, 2]
+
+NDArray b({1});
+b.fill(10.0f);  // [10]
+
+NDArray c = a + b;  // Automatically broadcasts to [10, 11, 12]
+```
+
+## Broadcasting Rules
+
+IncliArray follows NumPy-style broadcasting rules:
+
+<Steps>
+1. **Align shapes from the right**: Compare dimensions from the trailing axis
+2. **Compatible dimensions**: Two dimensions are compatible if:
+   - They are equal, OR
+   - One of them is 1
+3. **Result shape**: The output has the maximum size along each axis
+4. **Size-1 dimensions are stretched**: Arrays with size-1 dimensions are repeated along that axis
+</Steps>
+
+### Shape Compatibility Examples
+
+| Shape A | Shape B | Result Shape | Compatible? |
+|---------|---------|--------------|-------------|
+| (3, 4) | (3, 4) | (3, 4) | ✓ Exact match |
+| (3, 1) | (1, 4) | (3, 4) | ✓ Both broadcast |
+| (5, 1) | (5, 3) | (5, 3) | ✓ B broadcasts |
+| (1, 4) | (3, 4) | (3, 4) | ✓ A broadcasts |
+| (3,) | (3, 4) | (3, 4) | ✓ A adds dimension |
+| (3, 4) | (4,) | (3, 4) | ✓ B adds dimension |
+| (3, 4) | (3, 5) | - | ✗ Incompatible |
+| (2, 3) | (3, 2) | - | ✗ Incompatible |
+
+## Common Broadcasting Patterns
+
+### Scalar to Array
+
+Scalar operations are a special case of broadcasting:
+
+```cpp
+NDArray arr({2, 3});
+arr.fillSequential();
+
+NDArray result = arr + 100.0f;
+result.print();
+// Output:
+// [100, 101, 102]
+// [103, 104, 105]
+```
+
+### Vector to Matrix (Row-wise)
+
+Broadcast a row vector across all rows:
+
+```cpp
+NDArray matrix({3, 4});
+matrix.ones();
+
+NDArray row({1, 4});
+row.fillSequential();  // [0, 1, 2, 3]
+
+NDArray result = matrix + row;
+result.print();
+// Output:
+// [1, 2, 3, 4]
+// [1, 2, 3, 4]
+// [1, 2, 3, 4]
+```
+
+### Vector to Matrix (Column-wise)
+
+Broadcast a column vector across all columns:
+
+```cpp
+NDArray matrix({3, 4});
+matrix.ones();
+
+NDArray col({3, 1});
+col.fillSequential();  // [[0], [1], [2]]
+
+NDArray result = matrix + col;
+result.print();
+// Output:
+// [1, 1, 1, 1]
+// [2, 2, 2, 2]
+// [3, 3, 3, 3]
+```
+
+### Matrix to Matrix
+
+Broadcast two matrices with size-1 dimensions:
+
+```cpp
+NDArray a({3, 1});
+a.fillSequential();  // [[0], [1], [2]]
+
+NDArray b({1, 4});
+b.fillSequential();  // [[0, 1, 2, 3]]
+
+NDArray result = a + b;
+result.metadata(true);  // Shape: (3, 4)
+result.print();
+// Output:
+// [0, 1, 2, 3]
+// [1, 2, 3, 4]
+// [2, 3, 4, 5]
+```
+
+## Broadcasting with Different Ranks
+
+Arrays with different numbers of dimensions can broadcast:
+
+```cpp
+// 1D vector broadcasts with 2D matrix
+NDArray matrix({2, 3});
+matrix.fillSequential();
+// [0, 1, 2]
+// [3, 4, 5]
+
+NDArray vec({3});
+vec.fill(10.0f);  // [10, 10, 10]
+
+NDArray result = matrix + vec;
+// vec is treated as shape (1, 3) and broadcasts to (2, 3)
+result.print();
+// Output:
+// [10, 11, 12]
+// [13, 14, 15]
+```
+
+## Broadcasting in Operations
+
+All element-wise operations support broadcasting:
+
+```cpp
+NDArray a({4, 1});
+a.fillSequential();
+
+NDArray b({1, 3});
+b.fill(2.0f);
+
+// Addition
+NDArray sum = a + b;  // (4, 1) + (1, 3) -> (4, 3)
+
+// Element-wise multiplication
+NDArray prod = a.element_wise_multiply(b);  // (4, 1) * (1, 3) -> (4, 3)
+
+// Division
+NDArray quot = a / b;  // (4, 1) / (1, 3) -> (4, 3)
+```
+
+<Warning>
+**Matrix multiplication does NOT broadcast.** The `operator*` is strictly 2D matmul:
+
+```cpp
+NDArray a({2, 3});
+NDArray b({3, 4});
+NDArray c = a * b;  // OK: Standard 2D matmul -> (2, 4)
+
+NDArray d({1, 3});
+// NDArray e = a * d;  // ERROR: Dimension mismatch (d is not (3, k))
+```
+
+Use `element_wise_multiply()` if you want element-wise broadcasting.
+</Warning>
+
+## Broadcasting and Autograd
+
+Broadcasted operations correctly propagate gradients:
+
+```cpp
+NDArray a({3, 1});
+a.fill(2.0f);
+
+NDArray b({1, 4});
+b.fill(3.0f);
+
+// c = a * b broadcasts to (3, 4)
+NDArray c = a.element_wise_multiply(b);
+NDArray loss = c.sum();
+
+loss.backward();
+
+// Gradient of 'a' is summed over broadcasted dimension
+a.print(NDArray::PrintType::Grad);
+// Output:
+// [12]  (3 * 4 contributions)
+// [12]
+// [12]
+
+// Gradient of 'b' is summed over broadcasted dimension
+b.print(NDArray::PrintType::Grad);
+// Output: [6, 6, 6, 6]  (2 * 3 contributions)
+```
+
+<Note>
+When a dimension is broadcast (size 1 → size N), the gradient is **summed** over that dimension during backpropagation to match the original shape.
+</Note>
+
+## Practical Example: Batch Normalization
+
+<CodeGroup>
+```cpp Example: Normalize Rows
+#include "NDArray.h"
+#include <iostream>
+
+int main() {
+    // Data: 4 samples, 3 features
+    NDArray data({4, 3});
+    data.rand(0.0f, 10.0f);
+    
+    std::cout << "Original data:" << std::endl;
+    data.print();
+    
+    // Compute mean per feature (column)
+    // For simplicity, manually compute means
+    NDArray mean({1, 3});
+    NDArray sum = data.sum(0);  // Sum along rows
+    mean = sum / 4.0f;          // Divide by number of samples
+    
+    std::cout << "\nMean per feature:" << std::endl;
+    mean.print();
+    
+    // Normalize: subtract mean from each sample
+    // Broadcasting (4, 3) - (1, 3) -> (4, 3)
+    NDArray normalized = data - mean;
+    
+    std::cout << "\nNormalized data:" << std::endl;
+    normalized.print();
+    
+    return 0;
+}
+```
+</CodeGroup>
+
+## Broadcasting Performance
+
+<Tip>
+Broadcasting is memory-efficient:
+- No data is actually copied or replicated
+- Strides are adjusted to simulate replication
+- Elements are accessed on-the-fly during computation
+</Tip>
+
+## Common Pitfalls
+
+### Incompatible Shapes
+
+```cpp
+NDArray a({3, 4});
+NDArray b({3, 5});
+// NDArray c = a + b;  // ERROR: Incompatible shapes
+```
+
+### Unintended Broadcasting
+
+```cpp
+// Accidentally adding wrong dimension
+NDArray matrix({4, 5});
+NDArray vec({4});  // You meant (4, 1) but got (4,)
+
+// This broadcasts as (4, 5) + (4,) which is treated as (4, 5) + (1, 4)
+// May not produce the intended result!
+
+// Solution: Explicitly create correct shape
+NDArray vecCol({4, 1});
+vecCol.fillSequential();
+NDArray result = matrix + vecCol;  // Correct column-wise broadcast
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Operations" icon="calculator" href="/guides/operations">
+    See broadcasting in element-wise operations
+  </Card>
+  <Card title="Matrix Multiplication" icon="grid-2" href="/guides/matrix-multiplication">
+    Learn about 2D matmul (no broadcasting)
+  </Card>
+</CardGroup>

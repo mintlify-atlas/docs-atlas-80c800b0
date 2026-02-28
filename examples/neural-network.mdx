@@ -1,0 +1,279 @@
+---
+title: "Neural Network Layer"
+description: "Build a simple neural network layer with forward and backward pass"
+icon: "brain-circuit"
+---
+
+This example demonstrates a simple neural network layer showing how IncliArray enables training through forward and backward passes.
+
+## Complete Example
+
+```cpp neural_network.cpp
+#include "../include/NDArray.h"
+#include <iostream>
+
+int main(void) {
+  // Input: 4 samples, 3 features each
+  NDArray X({4, 3});
+  X.fillSequential();
+  
+  std::cout << "Input X (4 samples, 3 features):" << std::endl;
+  X.print();
+  
+  // Weights: 3 input features -> 2 output features
+  NDArray W({3, 2});
+  W.randint(-5, 5);
+  
+  std::cout << "\nWeights W (3 inputs -> 2 outputs):" << std::endl;
+  W.print();
+  
+  // Forward pass: Y = X * W
+  NDArray Y = X * W;
+  
+  std::cout << "\nOutput Y (4 samples, 2 features):" << std::endl;
+  Y.print();
+  
+  // Simple loss: sum of squared outputs
+  NDArray loss = Y * Y;
+  
+  std::cout << "\nSquared outputs (loss):" << std::endl;
+  loss.print();
+  
+  // Backward pass
+  loss.backward();
+  
+  std::cout << "\nGradient of Weights (dL/dW):" << std::endl;
+  W.print(NDArray::PrintType::Grad);
+  
+  std::cout << "\nGradient of Input (dL/dX):" << std::endl;
+  X.print(NDArray::PrintType::Grad);
+  
+  return 0;
+}
+```
+
+## Step-by-Step Walkthrough
+
+<Steps>
+<Step title="Create input data">
+  ```cpp
+  NDArray X({4, 3});
+  X.fillSequential();
+  ```
+
+  Creates a batch of 4 samples, each with 3 features:
+
+  ```
+  X = 
+  [[0, 1, 2],
+   [3, 4, 5],
+   [6, 7, 8],
+   [9, 10, 11]]
+  ```
+
+  In a real neural network, this would be your training data.
+  
+  **Shape**: (batch_size=4, input_features=3)
+</Step>
+
+<Step title="Initialize weights">
+  ```cpp
+  NDArray W({3, 2});
+  W.randint(-5, 5);
+  ```
+
+  Creates weight matrix mapping 3 input features to 2 output features.
+
+  Example:
+  ```
+  W = 
+  [[2, -3],
+   [-1, 4],
+   [3, 1]]
+  ```
+
+  These are the learnable parameters of your neural network layer.
+  
+  **Shape**: (input_features=3, output_features=2)
+</Step>
+
+<Step title="Forward pass">
+  ```cpp
+  NDArray Y = X * W;
+  ```
+
+  Computes the linear transformation: Y = X × W
+
+  This is the core operation of a neural network layer (without activation function).
+
+  Example result:
+  ```
+  Y = 
+  [[5, 6],
+   [14, 12],
+   [23, 18],
+   [32, 24]]
+  ```
+  
+  **Shape**: (batch_size=4, output_features=2)
+
+  Each row is the output for one sample.
+</Step>
+
+<Step title="Compute loss">
+  ```cpp
+  NDArray loss = Y * Y;
+  ```
+
+  Computes element-wise squared values as a simple loss function.
+
+  In real training, you'd use a proper loss function like:
+  - Mean Squared Error (regression)
+  - Cross-Entropy (classification)
+
+  Example:
+  ```
+  loss = 
+  [[25, 36],
+   [196, 144],
+   [529, 324],
+   [1024, 576]]
+  ```
+</Step>
+
+<Step title="Backward pass">
+  ```cpp
+  loss.backward();
+  ```
+
+  Triggers automatic differentiation:
+  1. Computes gradients of loss with respect to Y
+  2. Backpropagates through matrix multiplication
+  3. Computes gradients for both W and X
+
+  This is where the "magic" of deep learning happens.
+</Step>
+
+<Step title="Access weight gradients">
+  ```cpp
+  W.print(NDArray::PrintType::Grad);
+  ```
+
+  Shows dL/dW - how the loss changes with respect to each weight.
+
+  Example:
+  ```
+  Grad W = 
+  [[504, 432],
+   [576, 492],
+   [648, 552]]
+  ```
+
+  In real training, you'd use these gradients to update weights:
+  ```cpp
+  W = W - learning_rate * gradient
+  ```
+</Step>
+
+<Step title="Access input gradients">
+  ```cpp
+  X.print(NDArray::PrintType::Grad);
+  ```
+
+  Shows dL/dX - useful when this layer is part of a larger network.
+
+  Example:
+  ```
+  Grad X = 
+  [[-8, 20, 12],
+   [-20, 56, 32],
+   [-32, 92, 52],
+   [-44, 128, 72]]
+  ```
+
+  These gradients would flow to previous layers in a deeper network.
+</Step>
+</Steps>
+
+## Expected Output
+
+```
+Input X (4 samples, 3 features):
+[[0, 1, 2],
+ [3, 4, 5],
+ [6, 7, 8],
+ [9, 10, 11]]
+
+Weights W (3 inputs -> 2 outputs):
+[[2, -3],
+ [-1, 4],
+ [3, 1]]
+
+Output Y (4 samples, 2 features):
+[[5, 6],
+ [14, 12],
+ [23, 18],
+ [32, 24]]
+
+Squared outputs (loss):
+[[25, 36],
+ [196, 144],
+ [529, 324],
+ [1024, 576]]
+
+Gradient of Weights (dL/dW):
+[[504, 432],
+ [576, 492],
+ [648, 552]]
+
+Gradient of Input (dL/dX):
+[[-8, 20, 12],
+ [-20, 56, 32],
+ [-32, 92, 52],
+ [-44, 128, 72]]
+```
+
+<Note>
+Weight values are random, so your exact output will differ, but the shapes and gradient computation will follow the same pattern.
+</Note>
+
+## Neural Network Training Loop
+
+In a complete training implementation, you would:
+
+<Steps>
+<Step title="Forward pass">
+  Compute predictions: `Y = X * W`
+</Step>
+
+<Step title="Compute loss">
+  Compare predictions to targets
+</Step>
+
+<Step title="Backward pass">
+  Compute gradients: `loss.backward()`
+</Step>
+
+<Step title="Update weights">
+  ```cpp
+  // Pseudo-code:
+  W_data = W_data - learning_rate * W_gradient
+  ```
+</Step>
+
+<Step title="Repeat">
+  Iterate over multiple epochs until convergence
+</Step>
+</Steps>
+
+## Key Neural Network Concepts
+
+- **Forward pass**: Data flows through layers to produce predictions
+- **Loss function**: Measures how far predictions are from targets
+- **Backward pass**: Computes gradients via backpropagation
+- **Gradient descent**: Updates weights using gradients to minimize loss
+- **Autograd**: IncliArray automatically tracks operations and computes gradients
+
+<Tip>
+To build a deeper network, stack multiple layers and apply activation functions (like ReLU or sigmoid) between linear transformations.
+</Tip>

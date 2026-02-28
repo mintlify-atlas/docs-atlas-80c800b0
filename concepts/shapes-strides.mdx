@@ -1,0 +1,247 @@
+---
+title: Shapes and strides
+description: Understanding how IncliArray uses shape and stride vectors for efficient memory layouts
+---
+
+IncliArray uses two key vectors to define array layout: **shape** determines the logical dimensions, and **strides** determines how to navigate memory. This design enables efficient views without copying data.
+
+## Shape vector
+
+The shape vector defines the size of each dimension:
+
+```cpp
+NDArray matrix({2, 3});  // shape = {2, 3}
+// - 2 rows (first dimension)
+// - 3 columns (second dimension)
+// - Total elements: 2 × 3 = 6
+
+NDArray tensor({4, 5, 6});  // shape = {4, 5, 6}
+// - 4 blocks along first axis
+// - 5 rows per block
+// - 6 columns per row
+// - Total elements: 4 × 5 × 6 = 120
+```
+
+<Info>
+The product of all shape dimensions equals `size`, the total number of elements in the array.
+</Info>
+
+## Strides vector
+
+The stride vector defines the step size (in elements) to move along each dimension:
+
+```cpp
+NDArray matrix({2, 3});
+// shape = {2, 3}
+// strides = {3, 1}  (computed automatically)
+
+// To move to the next row: skip 3 elements
+// To move to the next column: skip 1 element
+```
+
+### Row-major stride calculation
+
+For a contiguous array, strides are computed right-to-left:
+
+```cpp
+// Shape: {2, 3, 4}
+// Strides: {12, 4, 1}
+//
+// stride[2] = 1                    (last dimension)
+// stride[1] = shape[2] = 4
+// stride[0] = shape[1] × stride[1] = 3 × 4 = 12
+```
+
+The formula for element `(i, j, k)` in memory:
+
+```
+flat_index = i * strides[0] + j * strides[1] + k * strides[2]
+           = i * 12 + j * 4 + k * 1
+```
+
+## How strides enable views
+
+Strides allow creating views that share memory with different layouts:
+
+```cpp
+NDArray original({4, 5});
+original.fillSequential();
+// Memory: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, ...]
+// Shape: {4, 5}, Strides: {5, 1}
+
+// Create a view of rows 1-2, columns 1-3
+NDArray view = original.slice({{1, 3}, {1, 4}});
+// New shape: {2, 3}
+// New strides: {5, 1}  (same as original!)
+// Data pointer: offset to position [1, 1]
+```
+
+<Note>
+The view shares memory with the original array. Changes to the view affect the original and vice versa. The stride vector remains `{5, 1}` because we're still navigating the same memory layout.
+</Note>
+
+## Contiguous vs non-contiguous arrays
+
+### Contiguous arrays
+
+An array is **contiguous** when its strides match the standard row-major pattern:
+
+```cpp
+NDArray X({3, 4});
+X.isContiguous();  // true
+// Shape: {3, 4}
+// Strides: {4, 1}  ← standard row-major
+
+// Elements are laid out sequentially in memory
+```
+
+Contiguous arrays support:
+- Flat indexing (`get(index)`, `set(index, value)`)
+- Reshaping
+- Fast copying
+
+### Non-contiguous arrays
+
+Views created by `slice()` may be non-contiguous:
+
+```cpp
+NDArray original({4, 6});
+original.fillSequential();
+
+// Take every other column
+NDArray view = original.slice({{0, 4}, {0, 6, 2}});
+// Shape: {4, 3}
+// Strides: {6, 2}  ← NOT standard row-major!
+//                     (would be {3, 1} for contiguous)
+
+view.isContiguous();  // false
+```
+
+<Warning>
+Non-contiguous arrays cannot use flat indexing or reshaping. Use multi-dimensional indexing (`get({i, j})`) or `clone()` to create a contiguous copy.
+</Warning>
+
+## Indexing with strides
+
+Here's how multi-dimensional indexing works:
+
+```cpp
+NDArray matrix({3, 4});
+matrix.fillSequential();
+// Memory: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+// Shape: {3, 4}
+// Strides: {4, 1}
+
+// Access element at [1, 2]
+std::vector<int> indices = {1, 2};
+int flat_index = 0;
+for (int i = 0; i < indices.size(); i++) {
+    flat_index += indices[i] * matrix.strides[i];
+}
+// flat_index = 1 * 4 + 2 * 1 = 6
+
+float value = matrix.data[flat_index];  // 6.0
+```
+
+This works for both contiguous and non-contiguous arrays.
+
+## Reshaping
+
+Reshaping changes the shape vector and recomputes strides:
+
+```cpp
+NDArray X({2, 6});
+X.fillSequential();
+X.print();
+// [[0, 1, 2, 3, 4, 5],
+//  [6, 7, 8, 9, 10, 11]]
+
+// Reshape to 3×4
+X.reshape({3, 4});
+X.print();
+// [[0, 1, 2, 3],
+//  [4, 5, 6, 7],
+//  [8, 9, 10, 11]]
+
+// Shape changed: {2, 6} → {3, 4}
+// Strides changed: {6, 1} → {4, 1}
+// Memory unchanged: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+```
+
+<Info>
+Reshaping only works for owning, contiguous arrays. It reinterprets the same memory with a different shape.
+</Info>
+
+## Real-world example
+
+Here's how strides enable efficient slicing:
+
+```cpp
+#include "NDArray.h"
+#include <iostream>
+
+int main() {
+    // Create a 4×5 matrix
+    NDArray matrix({4, 5});
+    matrix.fillSequential();
+    
+    std::cout << "Original matrix:" << std::endl;
+    matrix.print();
+    matrix.metadata(true, true);
+    // Shape: [4, 5]
+    // Strides: [5, 1]
+    
+    // Extract middle 2×3 submatrix
+    NDArray view = matrix.slice({{1, 3}, {1, 4}});
+    
+    std::cout << "\nView (rows 1-2, cols 1-3):" << std::endl;
+    view.print();
+    view.metadata(true, true);
+    // Shape: [2, 3]
+    // Strides: [5, 1]  ← Same strides!
+    
+    // Check contiguity
+    std::cout << "\nOriginal contiguous? " 
+              << (matrix.isContiguous() ? "yes" : "no") << std::endl;
+    std::cout << "View contiguous? " 
+              << (view.isContiguous() ? "yes" : "no") << std::endl;
+    
+    return 0;
+}
+```
+
+## Key insights
+
+<Accordion title="Why are strides important?">
+Strides allow creating views without copying data. When you slice an array, only the shape, strides, and data pointer change—the underlying memory is shared. This is crucial for performance when working with large tensors.
+</Accordion>
+
+<Accordion title="What happens to strides during slicing?">
+Strides typically stay the same during slicing because you're navigating the same memory layout. The shape changes to reflect the smaller view, and the data pointer is offset to the starting element.
+</Accordion>
+
+<Accordion title="When do I need to worry about contiguity?">
+Most operations work on both contiguous and non-contiguous arrays. You only need contiguous arrays for reshaping and flat indexing. If you have a non-contiguous view, call `clone()` to create a contiguous copy.
+</Accordion>
+
+## Implementation details
+
+From `include/NDArray.h:62-63`:
+
+```cpp
+/** Dimensions of the array, e.g. {rows, cols} for 2D. */
+std::vector<int> shape;
+/** Row‑major strides in elements; stride[i] is step for axis i. */
+std::vector<int> strides;
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Memory ownership" href="/concepts/ownership" icon="database">
+    Learn when arrays own vs. share memory
+  </Card>
+  <Card title="Autograd" href="/concepts/autograd" icon="brain">
+    Understand automatic differentiation
+  </Card>
+</CardGroup>

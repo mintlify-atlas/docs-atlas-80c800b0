@@ -1,0 +1,449 @@
+---
+title: Automatic differentiation
+description: Understanding reverse-mode autograd in IncliArray for gradient computation
+---
+
+IncliArray implements **reverse-mode automatic differentiation** (autograd) to automatically compute gradients for backpropagation. This enables training neural networks and optimization algorithms without manually deriving and coding gradient formulas.
+
+## What is reverse-mode autograd?
+
+Reverse-mode autograd computes gradients by:
+
+1. **Forward pass**: Execute operations and build a computation graph
+2. **Backward pass**: Traverse the graph in reverse, accumulating gradients via the chain rule
+
+```cpp
+NDArray X({1});
+X.randint(1, 10);  // X = 5.0
+
+NDArray Y = X * 2;       // Y = 10.0
+NDArray Z = Y + 10;      // Z = 20.0
+
+Z.backward();  // Compute gradients
+
+// Gradients:
+// dZ/dZ = 1.0
+// dZ/dY = 1.0
+// dZ/dX = 2.0
+```
+
+<Info>
+Reverse-mode is efficient for functions with many inputs and few outputs, making it ideal for neural networks where you compute one loss value from thousands of parameters.
+</Info>
+
+## Computation graph structure
+
+Each NDArray node stores graph metadata:
+
+```cpp
+class NDArray {
+public:
+    // Graph structure
+    std::vector<std::reference_wrapper<NDArray>> prev;  // Parents
+    std::string op;                                      // Operation name
+    std::function<void()> _backward;                     // Gradient function
+    
+    // Data and gradients
+    float* data;    // Forward pass values
+    float* grad;    // Gradient accumulator
+};
+```
+
+### Graph fields
+
+- **`prev`**: References to parent nodes (inputs to the operation)
+- **`op`**: Debug string identifying the operation (`"+"`, `"*"`, `"elem_mul"`, etc.)
+- **`_backward`**: Closure that accumulates gradients into parent nodes
+
+From `include/NDArray.h:75-84`:
+
+```cpp
+/** Operation tag for debug/inspection (e.g. "+", "-", "elem_mul", "*"). */
+std::string op;
+/** Optional human‑readable label for this tensor. */
+std::string label;
+/** Parents in autograd graph. Empty for detached tensors (slice/clone). */
+std::vector<std::reference_wrapper<NDArray>> prev;
+/** Backpropagation closure; invoked during backward(). */
+std::function<void()> _backward;
+```
+
+## Building the computation graph
+
+Operations automatically record graph edges:
+
+```cpp
+NDArray A({2, 3});
+A.fillSequential();
+A.label = "A";
+
+NDArray B({2, 3});
+B.ones();
+B.label = "B";
+
+// Addition records graph metadata
+NDArray C = A + B;
+// C.prev = {A, B}
+// C.op = "+"
+// C._backward = [A, B, C]() {
+//     // Accumulate gradients: dA += dC, dB += dC
+// }
+
+NDArray D = C * 2.0f;
+// D.prev = {C}
+// D.op = "*scalar"
+// D._backward = [C, D]() {
+//     // Accumulate gradient: dC += 2.0 * dD
+// }
+```
+
+## Calling backward()
+
+The `backward()` method performs reverse-mode backpropagation:
+
+```cpp
+void NDArray::backward() {
+    // 1. Set gradient of output to 1 (dL/dL = 1)
+    // 2. Build topological ordering of graph
+    // 3. Traverse in reverse, calling _backward() on each node
+}
+```
+
+From `include/NDArray.h:326-334`:
+
+```cpp
+/**
+ * @brief Reverse‑mode backprop: accumulate gradients into all reachable
+ *        parents from this node.
+ *
+ * Sets this->grad to ones (dOut/dOut = 1) and walks the graph in reverse
+ * topological order, invoking each node's `_backward` closure.
+ */
+void backward();
+```
+
+### Example: Full forward and backward pass
+
+```cpp
+#include "NDArray.h"
+#include <iostream>
+
+int main() {
+    // Forward pass
+    NDArray X({2, 3});
+    X.fillSequential();
+    X.label = "X";
+    
+    NDArray Y({3, 2});
+    Y.randint(1, 10);
+    Y.label = "Y";
+    
+    NDArray Z = X * Y;        // Matrix multiply
+    Z.label = "Z";
+    
+    NDArray result = Z + 10;  // Scalar addition
+    result.label = "result";
+    
+    std::cout << "Forward pass:" << std::endl;
+    std::cout << "Z = " << std::endl;
+    Z.print();
+    std::cout << "result = " << std::endl;
+    result.print();
+    
+    // Backward pass
+    result.backward();
+    
+    std::cout << "\nBackward pass:" << std::endl;
+    std::cout << "Grad X:" << std::endl;
+    X.print(NDArray::PrintType::Grad);
+    
+    std::cout << "Grad Y:" << std::endl;
+    Y.print(NDArray::PrintType::Grad);
+    
+    return 0;
+}
+```
+
+This example is from `examples/basic_vectors.cpp:4-34`.
+
+## Operations that support autograd
+
+IncliArray provides gradient implementations for core operations:
+
+### Element-wise operations
+
+```cpp
+NDArray A({2, 3}), B({2, 3});
+
+// Addition: dA += dOut, dB += dOut
+NDArray C = A + B;
+
+// Subtraction: dA += dOut, dB += -dOut
+NDArray D = A - B;
+
+// Element-wise multiply: dA += B * dOut, dB += A * dOut
+NDArray E = A.element_wise_multiply(B);
+
+// Division: dA += dOut / B, dB += -(A / B²) * dOut
+NDArray F = A / B;
+
+// Power: dA += value * A^(value-1) * dOut
+NDArray G = A ^ 2.0f;
+```
+
+### Scalar operations
+
+```cpp
+NDArray X({2, 3});
+
+// Scalar addition: dX += dOut
+NDArray Y = X + 10.0f;
+
+// Scalar multiply: dX += scalar * dOut
+NDArray Z = X * 2.0f;
+
+// Scalar division: dX += (1/scalar) * dOut
+NDArray W = X / 2.0f;
+```
+
+### Matrix operations
+
+```cpp
+NDArray A({2, 3}), B({3, 4});
+
+// Matrix multiply: dA = dC * B^T, dB = A^T * dC
+NDArray C = A * B;
+```
+
+### Reduction operations
+
+```cpp
+NDArray X({2, 3, 4});
+
+// Sum all elements: broadcasts dOut to all elements
+NDArray total = X.sum();
+
+// Sum along axis: broadcasts dOut across reduced dimension
+NDArray row_sums = X.sum(1);  // Sum along axis 1
+```
+
+<Note>
+All these operations create new owning arrays that participate in the autograd graph. The result stores references to its inputs and a backward closure.
+</Note>
+
+## Detached operations
+
+Some operations explicitly opt out of autograd:
+
+### slice() creates detached views
+
+```cpp
+NDArray base({4, 5});
+base.fillSequential();
+
+NDArray view = base.slice({{1, 3}, {1, 4}});
+// view.prev is empty
+// view.op is empty
+// view._backward is no-op
+
+view.backward();  // Does nothing
+```
+
+From `include/NDArray.h:153-165`:
+
+```cpp
+/**
+ * The returned NDArray shares `data` with the base tensor and has updated
+ * shape/strides/offset. It is DETACHED from autograd: no graph is recorded
+ * and its `_backward` is a no‑op.
+ */
+NDArray slice(std::vector<std::tuple<int, int>> indices);
+```
+
+### clone() creates detached copies
+
+```cpp
+NDArray original({3, 4});
+original.fillSequential();
+
+NDArray copy = original.clone();
+// copy.prev is empty
+// copy.op is empty
+// copy._backward is no-op
+
+copy.backward();  // Does nothing
+```
+
+From `include/NDArray.h:336-342`:
+
+```cpp
+/**
+ * @brief Materialize a contiguous, owning copy. Detached from autograd.
+ *
+ * The returned tensor has no graph linkage.
+ */
+NDArray clone();
+```
+
+<Warning>
+Both `slice()` and `clone()` create arrays that are detached from the computation graph. Use them when you need data manipulation outside of gradient computation.
+</Warning>
+
+## Gradient accumulation
+
+Gradients are **accumulated** (added) rather than overwritten:
+
+```cpp
+NDArray X({2, 3});
+X.fillSequential();
+
+NDArray Y = X + X;  // Y uses X twice
+
+Y.backward();
+
+// X.grad = dY/dX = 1.0 + 1.0 = 2.0 for each element
+```
+
+This is crucial for:
+- Variables used multiple times in a computation
+- Training with mini-batches (accumulate gradients across samples)
+
+<Info>
+If you run `backward()` multiple times, gradients accumulate. Manually zero gradients between iterations:
+
+```cpp
+for (int i = 0; i < X.size; i++) {
+    X.grad[i] = 0.0f;
+}
+```
+</Info>
+
+## Topological ordering
+
+Backward pass requires visiting nodes in reverse dependency order:
+
+```cpp
+// Computation:
+NDArray A({1}), B({1});
+NDArray C = A + B;
+NDArray D = C * 2;
+NDArray E = C + 1;
+NDArray F = D + E;
+
+// Graph structure:
+//     A    B
+//      \  /
+//       C
+//      / \  
+//     D   E
+//      \ /
+//       F
+
+// Topological order: [A, B, C, D, E, F]
+// Backward traversal: [F, E, D, C, B, A]
+```
+
+The `build_topo()` method (from `include/NDArray.h:48-55`) ensures parents are processed before children during backprop.
+
+## Real-world example
+
+Here's a simple gradient descent step:
+
+```cpp
+#include "NDArray.h"
+#include <iostream>
+
+int main() {
+    // Initialize weight and input
+    NDArray W({1});
+    W.fill(2.0f);
+    W.label = "W";
+    
+    NDArray X({1});
+    X.fill(3.0f);
+    X.label = "X";
+    
+    // Forward pass: prediction = W * X
+    NDArray pred = W.element_wise_multiply(X);
+    pred.label = "pred";
+    
+    // Target
+    NDArray target({1});
+    target.fill(10.0f);
+    
+    // Loss: (pred - target)²
+    NDArray diff = pred - target;
+    NDArray loss = diff ^ 2.0f;
+    
+    std::cout << "Prediction: ";
+    pred.print();
+    std::cout << "Loss: ";
+    loss.print();
+    
+    // Backward pass
+    loss.backward();
+    
+    std::cout << "\nGradient dL/dW: ";
+    W.print(NDArray::PrintType::Grad);
+    
+    // Gradient descent step
+    float learning_rate = 0.01f;
+    W.data[0] -= learning_rate * W.grad[0];
+    
+    std::cout << "Updated weight: ";
+    W.print();
+    
+    return 0;
+}
+```
+
+## Key insights
+
+<Accordion title="Why reverse-mode instead of forward-mode?">
+Reverse-mode is efficient for functions with many inputs (parameters) and few outputs (loss). In neural networks, you typically have thousands or millions of parameters but compute a single scalar loss. Reverse-mode computes all gradients in one backward pass.
+</Accordion>
+
+<Accordion title="What's the memory cost of autograd?">
+Each operation allocates a new result tensor with data and gradient buffers. The computation graph holds references to intermediate results, so they aren't freed until after `backward()`. For large models, consider breaking the computation into smaller chunks.
+</Accordion>
+
+<Accordion title="Can I disable autograd for certain operations?">
+Use `slice()` or `clone()` to create detached tensors. Operations on detached tensors won't build graph edges. This is useful for data preprocessing or evaluation where you don't need gradients.
+</Accordion>
+
+<Accordion title="How do I handle multiple backward passes?">
+Gradients accumulate across `backward()` calls. Zero the gradient buffers manually between iterations:
+
+```cpp
+for (int i = 0; i < X.size; i++) {
+    X.grad[i] = 0.0f;
+}
+```
+</Accordion>
+
+## Supported operation gradients
+
+| Operation | Forward | Backward |
+|-----------|---------|----------|
+| `A + B` | Element-wise add | `dA += dOut`, `dB += dOut` |
+| `A - B` | Element-wise subtract | `dA += dOut`, `dB += -dOut` |
+| `A * B` | Matrix multiply (2D) | `dA = dOut * B^T`, `dB = A^T * dOut` |
+| `A.element_wise_multiply(B)` | Element-wise multiply | `dA += B * dOut`, `dB += A * dOut` |
+| `A / B` | Element-wise divide | `dA += dOut / B`, `dB += -(A/B²) * dOut` |
+| `A ^ value` | Element-wise power | `dA += value * A^(value-1) * dOut` |
+| `A + scalar` | Scalar add | `dA += dOut` |
+| `A * scalar` | Scalar multiply | `dA += scalar * dOut` |
+| `A / scalar` | Scalar divide | `dA += (1/scalar) * dOut` |
+| `A.sum()` | Reduce to scalar | Broadcast `dOut` to all elements |
+| `A.sum(axis)` | Reduce along axis | Broadcast `dOut` across axis |
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Operations" href="/api/operations" icon="calculator">
+    Explore all supported operations and their gradients
+  </Card>
+  <Card title="Quick start" href="/quickstart" icon="rocket">
+    Build your first neural network with autograd
+  </Card>
+</CardGroup>

@@ -1,0 +1,213 @@
+---
+title: "Matrix Multiplication"
+description: "Matrix operations with automatic differentiation"
+icon: "grid"
+---
+
+This example demonstrates matrix multiplication and gradient computation through multi-dimensional arrays.
+
+## Complete Example
+
+```cpp basic_vectors.cpp
+#include "../include/NDArray.h"
+#include <iostream>
+
+int main(void) {
+  NDArray X({2, 3});
+  X.fillSequential();
+
+  std::cout << "X = " << std::endl;
+  X.print();
+
+  NDArray Y({3, 2});
+  Y.randint(1, 10);
+
+  std::cout << "\nY = " << std::endl;
+  Y.print();
+
+  NDArray Z = X * Y;
+
+  std::cout << "\nZ = " << std::endl;
+  Z.print();
+
+  NDArray result = Z + 10;
+
+  std::cout << "\nresult = " << std::endl;
+  result.print();
+
+  result.backward();
+
+  std::cout << "\nGrad X = " << std::endl;
+  X.print(NDArray::PrintType::Grad);
+
+  std::cout << "\nGrad Y = " << std::endl;
+  Y.print(NDArray::PrintType::Grad);
+}
+```
+
+## Step-by-Step Walkthrough
+
+<Steps>
+<Step title="Create input matrix X">
+  ```cpp
+  NDArray X({2, 3});
+  X.fillSequential();
+  ```
+
+  Creates a 2×3 matrix filled with sequential values starting from 0:
+
+  ```
+  X = 
+  [[0, 1, 2],
+   [3, 4, 5]]
+  ```
+
+  **Shape**: (2, 3)
+</Step>
+
+<Step title="Create weight matrix Y">
+  ```cpp
+  NDArray Y({3, 2});
+  Y.randint(1, 10);
+  ```
+
+  Creates a 3×2 matrix with random integers between 1 and 10.
+
+  Example:
+  ```
+  Y = 
+  [[2, 7],
+   [5, 3],
+   [8, 4]]
+  ```
+
+  **Shape**: (3, 2)
+</Step>
+
+<Step title="Perform matrix multiplication">
+  ```cpp
+  NDArray Z = X * Y;
+  ```
+
+  Multiplies X (2×3) by Y (3×2) to produce Z (2×2).
+
+  The multiplication computes:
+  ```
+  Z[i,j] = Σ(X[i,k] * Y[k,j]) for all k
+  ```
+
+  Example result:
+  ```
+  Z = 
+  [[21, 11],
+   [66, 53]]
+  ```
+
+  **Shape**: (2, 2)
+</Step>
+
+<Step title="Add scalar to result">
+  ```cpp
+  NDArray result = Z + 10;
+  ```
+
+  Adds 10 to every element of Z:
+
+  ```
+  result = 
+  [[31, 21],
+   [76, 63]]
+  ```
+
+  **Shape**: (2, 2)
+</Step>
+
+<Step title="Compute gradients">
+  ```cpp
+  result.backward();
+  ```
+
+  Backpropagates through the entire computation graph:
+  - From result back through the addition
+  - Through the matrix multiplication
+  - To both input matrices X and Y
+</Step>
+
+<Step title="View gradient for X">
+  ```cpp
+  X.print(NDArray::PrintType::Grad);
+  ```
+
+  Shows how the result changes with respect to X.
+
+  Example:
+  ```
+  Grad X = 
+  [[9, 8, 12],
+   [9, 8, 12]]
+  ```
+
+  Each gradient value represents the sum of corresponding Y values due to matrix multiplication rules.
+</Step>
+
+<Step title="View gradient for Y">
+  ```cpp
+  Y.print(NDArray::PrintType::Grad);
+  ```
+
+  Shows how the result changes with respect to Y.
+
+  Example:
+  ```
+  Grad Y = 
+  [[3, 3],
+   [5, 5],
+   [7, 7]]
+  ```
+
+  Each gradient value represents the sum of corresponding X values.
+</Step>
+</Steps>
+
+## Expected Output
+
+```
+X = 
+[[0, 1, 2],
+ [3, 4, 5]]
+
+Y = 
+[[2, 7],
+ [5, 3],
+ [8, 4]]
+
+Z = 
+[[21, 11],
+ [66, 53]]
+
+result = 
+[[31, 21],
+ [76, 63]]
+
+Grad X = 
+[[9, 8, 12],
+ [9, 8, 12]]
+
+Grad Y = 
+[[3, 3],
+ [5, 5],
+ [7, 7]]
+```
+
+<Note>
+Y values are random, so your exact numbers for Z, result, and gradients will differ, but the shapes will match.
+</Note>
+
+## Understanding Gradient Flow
+
+For matrix multiplication `Z = X * Y`:
+
+- **Gradient of X**: `dL/dX = dL/dZ * Y^T`
+- **Gradient of Y**: `dL/dY = X^T * dL/dZ`
+
+Since we start with `dL/dresult = 1` (all ones), and `dresult/dZ = 1`, the gradients flow back through the matrix multiplication following these rules.

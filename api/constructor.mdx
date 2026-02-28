@@ -1,0 +1,89 @@
+---
+title: 'Constructor & Clone'
+description: 'Creating and copying NDArray instances'
+---
+
+## Constructor
+
+Construct an owning, contiguous NDArray of a given shape. Allocates memory for both `data` and `grad` buffers, computes row-major strides, and sets `ownsData = true`. This creates a base tensor that can participate in autograd.
+
+### Signature
+```cpp
+NDArray(std::vector<int> shape, std::string label = "", std::string op = "",
+        std::vector<std::reference_wrapper<NDArray>> prev = {})
+```
+
+### Parameters
+<ParamField path="shape" type="std::vector<int>" required>
+  The dimensions of the array (e.g., `{2, 3}` for a 2×3 matrix). The product of all dimensions determines the total number of elements.
+</ParamField>
+
+<ParamField path="label" type="std::string">
+  Optional human-readable label for debugging and inspection. Defaults to empty string.
+</ParamField>
+
+<ParamField path="op" type="std::string">
+  Optional operation tag for debug/inspection (e.g., "+", "-", "*"). Defaults to empty string.
+</ParamField>
+
+<ParamField path="prev" type="std::vector<std::reference_wrapper<NDArray>>">
+  Parent nodes in the autograd graph. Defaults to empty vector (no parents).
+</ParamField>
+
+### Returns
+A new NDArray instance with allocated memory and autograd capabilities.
+
+### Example
+```cpp
+// Create a 2D array (2 rows, 3 columns)
+NDArray X({2, 3});
+
+// Create a 1D array with a label
+NDArray Y({5}, "my_vector");
+
+// Create a 3D array
+NDArray Z({2, 3, 4});
+```
+
+### Notes
+- Memory is allocated for both `data` and `grad` buffers
+- The array is contiguous with row-major layout by default
+- `ownsData` is set to `true`, meaning the destructor will free the memory
+- The `size` is automatically computed as the product of all shape dimensions
+
+---
+
+## clone
+
+Materialize a contiguous, owning copy of an NDArray. The clone is **detached from autograd** - it has no graph linkage and cannot participate in backpropagation.
+
+### Signature
+```cpp
+NDArray clone()
+```
+
+### Parameters
+None.
+
+### Returns
+A new NDArray instance that is an independent copy of the source array, with no autograd connections.
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.fillSequential();
+
+// Create an independent copy
+NDArray Y = X.clone();
+
+// Y is detached from X's computation graph
+Y.set({0, 0}, 100.0);
+// X remains unchanged
+```
+
+### Notes
+- The returned tensor has `prev` empty and `_backward` is a no-op
+- If the source is contiguous, performs a fast contiguous copy
+- If the source is non-contiguous (e.g., a slice), uses stride-aware copying
+- Useful for materializing slices into owning arrays
+- The clone will always be contiguous, regardless of the source layout

@@ -1,0 +1,204 @@
+---
+title: N-dimensional arrays
+description: Understanding NDArray, the core data structure in IncliArray
+---
+
+The `NDArray` class is the fundamental data structure in IncliArray. It represents an N-dimensional array of floating-point numbers, similar to NumPy's ndarray but designed specifically for C++ with autograd support.
+
+## What is an NDArray?
+
+An NDArray is a container for multi-dimensional numeric data that provides:
+
+- **N-dimensional storage**: Support for scalars, vectors, matrices, and higher-dimensional tensors
+- **Row-major layout**: Memory is organized in C-style contiguous order
+- **Float data type**: All elements are 32-bit floating-point numbers
+- **Shape-based structure**: Dimensions defined by a shape vector
+- **Gradient tracking**: Built-in storage for automatic differentiation
+
+<Note>
+IncliArray focuses on a single data type (float) to keep the implementation minimal while supporting the most common deep learning use cases.
+</Note>
+
+## Row-major storage layout
+
+NDArrays store data in **row-major** (C-style) order, where the last dimension changes fastest in memory:
+
+```cpp
+NDArray matrix({2, 3});  // 2 rows, 3 columns
+matrix.fillSequential(); // Fills: 0, 1, 2, 3, 4, 5
+
+// Memory layout: [0, 1, 2, 3, 4, 5]
+// Logical view:
+// [[0, 1, 2],
+//  [3, 4, 5]]
+```
+
+This contrasts with column-major (Fortran-style) order used in some scientific libraries.
+
+## Creating arrays
+
+### Basic construction
+
+Create an NDArray by specifying its shape:
+
+```cpp
+// Scalar (0D array)
+NDArray scalar({1});
+
+// Vector (1D array)
+NDArray vector({5});
+
+// Matrix (2D array)
+NDArray matrix({3, 4});  // 3 rows, 4 columns
+
+// 3D tensor
+NDArray tensor({2, 3, 4});  // 2 × 3 × 4
+```
+
+### Initialization methods
+
+IncliArray provides several ways to populate arrays:
+
+```cpp
+NDArray X({2, 3});
+
+// Fill with sequential values: 0, 1, 2, 3, 4, 5
+X.fillSequential();
+
+// Fill with zeros
+X.zeros();
+
+// Fill with ones
+X.ones();
+
+// Fill with a constant value
+X.fill(3.14f);
+
+// Fill with random integers in [1, 10)
+X.randint(1, 10);
+
+// Fill with random floats in [0, 1)
+X.rand();
+
+// Fill with random floats in [low, high)
+X.rand(-1.0f, 1.0f);
+```
+
+<Warning>
+Initialization methods like `fill()`, `rand()`, and `fillSequential()` only work on arrays that own their data. Views created by `slice()` will throw a runtime error.
+</Warning>
+
+## Element access
+
+### Multi-dimensional indexing
+
+Access elements using a vector of indices:
+
+```cpp
+NDArray matrix({2, 3});
+matrix.fillSequential();
+
+// Get element at row 1, column 2
+float value = matrix.get({1, 2});  // Returns 5.0
+
+// Set element at row 0, column 1
+matrix.set({0, 1}, 42.0f);
+```
+
+### Flat indexing
+
+For contiguous, owning arrays, you can use flat indices:
+
+```cpp
+NDArray vector({5});
+vector.fillSequential();
+
+// Get third element (0-indexed)
+float value = vector.get(2);  // Returns 2.0
+
+// Set first element
+vector.set(0, 99.0f);
+```
+
+<Info>
+Flat indexing is only available for contiguous arrays that own their data. Use multi-dimensional indexing for views and non-contiguous arrays.
+</Info>
+
+## Shape and dimensions
+
+The shape determines how the flat memory buffer is interpreted:
+
+```cpp
+NDArray tensor({2, 3, 4});
+
+// Access shape information
+std::vector<int> shape = tensor.shape;  // {2, 3, 4}
+int ndim = tensor.ndim;                 // 3
+int size = tensor.size;                 // 24 (2 × 3 × 4)
+
+// Print metadata
+tensor.metadata(true, false, true, true, false);
+// Output:
+// Shape: [2, 3, 4]
+// Ndim: 3
+// Size: 24
+```
+
+## Real-world example
+
+Here's a complete example showing array creation, initialization, and basic operations:
+
+```cpp
+#include "NDArray.h"
+#include <iostream>
+
+int main() {
+    // Create a 2×3 matrix
+    NDArray X({2, 3});
+    X.fillSequential();
+    
+    std::cout << "Matrix X:" << std::endl;
+    X.print();
+    // Output:
+    // [[0, 1, 2],
+    //  [3, 4, 5]]
+    
+    // Access specific elements
+    float val = X.get({1, 2});  // Get element at row 1, col 2
+    std::cout << "X[1,2] = " << val << std::endl;  // 5.0
+    
+    // Modify an element
+    X.set({0, 0}, 10.0f);
+    X.print();
+    // Output:
+    // [[10, 1, 2],
+    //  [3, 4, 5]]
+    
+    return 0;
+}
+```
+
+## Key characteristics
+
+<Accordion title="Why only float data type?">
+IncliArray focuses on the most common deep learning use case: 32-bit floating-point computation. This design choice keeps the implementation minimal while covering neural network training, gradient descent, and most scientific computing tasks.
+</Accordion>
+
+<Accordion title="How does shape affect memory usage?">
+Memory usage is determined by `size` (the product of all shape dimensions). A `{2, 3, 4}` array uses 24 floats for data plus 24 floats for gradients, regardless of how those dimensions are arranged.
+</Accordion>
+
+<Accordion title="Can I change the shape after creation?">
+Yes, using `reshape()` for owning, contiguous arrays. The total number of elements must remain the same. See the shapes and strides concept page for details.
+</Accordion>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Shapes and strides" href="/concepts/shapes-strides" icon="grid">
+    Learn how shape and stride vectors enable efficient memory layouts
+  </Card>
+  <Card title="Memory ownership" href="/concepts/ownership" icon="database">
+    Understand when arrays own vs. share memory
+  </Card>
+</CardGroup>

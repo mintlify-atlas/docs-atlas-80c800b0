@@ -1,0 +1,106 @@
+---
+title: "Basic Scalar Arithmetic"
+description: "Learn autograd with basic scalar operations"
+icon: "1"
+---
+
+This example demonstrates basic scalar arithmetic operations and automatic differentiation in IncliArray.
+
+## Complete Example
+
+```cpp basic_scalars.cpp
+#include "../include/NDArray.h"
+#include <iostream>
+
+int main(void) {
+  NDArray X({1});
+  X.randint(1, 10);
+
+  std::cout << "X = ";
+  X.print();
+
+  NDArray Y = X * 2;
+  NDArray Z = Y + 10;
+
+  Z.backward();
+
+  std::cout << "Grad X = ";
+  X.print(NDArray::PrintType::Grad);
+
+  return 0;
+}
+```
+
+## Step-by-Step Walkthrough
+
+<Steps>
+<Step title="Create a scalar array">
+  ```cpp
+  NDArray X({1});
+  X.randint(1, 10);
+  ```
+
+  Creates a 1-dimensional array with a single element and initializes it with a random integer between 1 and 10.
+
+  Example output:
+  ```
+  X = [7]
+  ```
+</Step>
+
+<Step title="Build computation graph">
+  ```cpp
+  NDArray Y = X * 2;
+  NDArray Z = Y + 10;
+  ```
+
+  Performs two operations:
+  - Multiply X by 2: `Y = 7 * 2 = 14`
+  - Add 10 to Y: `Z = 14 + 10 = 24`
+
+  These operations automatically build a computation graph for autograd.
+</Step>
+
+<Step title="Compute gradients">
+  ```cpp
+  Z.backward();
+  ```
+
+  Triggers backpropagation from Z through the computation graph. This computes gradients for all arrays that led to Z.
+</Step>
+
+<Step title="Access gradients">
+  ```cpp
+  X.print(NDArray::PrintType::Grad);
+  ```
+
+  Prints the gradient of Z with respect to X.
+
+  Expected output:
+  ```
+  Grad X = [2]
+  ```
+
+  The gradient is 2 because:
+  - dZ/dY = 1 (derivative of Y + 10)
+  - dY/dX = 2 (derivative of X * 2)
+  - dZ/dX = dZ/dY × dY/dX = 1 × 2 = 2
+</Step>
+</Steps>
+
+## Expected Output
+
+```
+X = [7]
+Grad X = [2]
+```
+
+<Note>
+The actual value of X will vary since it's randomly initialized, but the gradient will always be 2.
+</Note>
+
+## Key Concepts
+
+- **Computation graph**: Operations are automatically tracked for backpropagation
+- **Automatic differentiation**: Call `.backward()` to compute all gradients
+- **Gradient access**: Use `PrintType::Grad` to view computed gradients

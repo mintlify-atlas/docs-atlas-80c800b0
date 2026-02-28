@@ -1,0 +1,381 @@
+---
+title: Autograd & Backpropagation
+description: Build computation graphs and compute gradients automatically with reverse-mode autograd
+---
+
+## Overview
+
+IncliArray includes lightweight reverse-mode automatic differentiation (autograd) for computing gradients. Every operation creates nodes in a computation graph, and calling `backward()` propagates gradients from outputs to inputs.
+
+```cpp
+NDArray x({2, 2});
+x.fill(3.0f);
+
+NDArray y = x * 2.0f;
+NDArray z = y + 10.0f;
+
+// Compute dz/dx
+z.backward();
+
+x.print(NDArray::PrintType::Grad);
+// Output:
+// [2, 2]
+// [2, 2]
+```
+
+## Computation Graphs
+
+Operations automatically build a directed acyclic graph (DAG):
+
+```cpp
+NDArray a({2});
+a.fill(2.0f);
+
+NDArray b({2});
+b.fill(3.0f);
+
+NDArray c = a + b;      // c depends on a, b
+NDArray d = c * 2.0f;   // d depends on c
+NDArray e = d.sum();    // e depends on d
+
+// Graph: a, b -> c -> d -> e
+```
+
+Each NDArray stores:
+- `prev`: References to parent arrays
+- `op`: Operation name (e.g., "+", "*", "sum")
+- `_backward`: Lambda function for gradient computation
+
+## The backward() Method
+
+Calling `backward()` on an output array:
+
+<Steps>
+1. Sets the output gradient to 1 (dOut/dOut = 1)
+2. Builds a topological ordering of the computation graph
+3. Traverses nodes in reverse order
+4. Invokes each node's `_backward()` function to accumulate gradients
+</Steps>
+
+```cpp
+NDArray x({2, 2});
+x.ones();
+
+NDArray y = x * 3.0f;
+NDArray z = y.sum();
+
+z.backward();  // Triggers backpropagation
+
+// Access accumulated gradients
+std::cout << "dz/dx:" << std::endl;
+x.print(NDArray::PrintType::Grad);
+// Output:
+// [3, 3]
+// [3, 3]
+```
+
+<Note>
+`backward()` should be called on a **scalar output** (or at least the final loss). The method initializes the output gradient to all ones, which is correct for scalar losses.
+</Note>
+
+## Accessing Gradients
+
+Gradients are stored in the `grad` buffer (same size as `data`):
+
+```cpp
+NDArray x({2, 3});
+x.fillSequential();
+
+NDArray loss = x.sum();
+loss.backward();
+
+// Access gradients by index
+float grad_0_0 = x.get({0, 0}, NDArray::PrintType::Grad);
+std::cout << grad_0_0 << std::endl;  // Output: 1
+
+// Print all gradients
+x.print(NDArray::PrintType::Grad);
+// Output:
+// [1, 1, 1]
+// [1, 1, 1]
+```
+
+## Differentiable Operations
+
+All core operations support autograd:
+
+### Arithmetic Operations
+
+| Operation | Gradient Formula |
+|-----------|------------------|
+| `c = a + b` | `da += dc`, `db += dc` |
+| `c = a - b` | `da += dc`, `db -= dc` |
+| `c = a * b` (element-wise) | `da += b * dc`, `db += a * dc` |
+| `c = a / b` | `da += dc / b`, `db -= (a / b^2) * dc` |
+| `c = a ^ p` | `da += p * a^(p-1) * dc` |
+
+### Matrix Multiplication
+
+```cpp
+// C = A * B (2D matmul)
+NDArray A({2, 3});
+A.rand();
+
+NDArray B({3, 4});
+B.rand();
+
+NDArray C = A * B;
+C.backward();  // Computes dC/dA = dC * B^T, dC/dB = A^T * dC
+```
+
+### Reductions
+
+```cpp
+// Scalar sum
+NDArray x({3, 3});
+x.fillSequential();
+
+NDArray s = x.sum();
+s.backward();
+
+// Gradient: all ones (each element contributes 1 to sum)
+x.print(NDArray::PrintType::Grad);
+
+// Axis sum
+NDArray y({2, 3});
+y.ones();
+
+NDArray col_sum = y.sum(0);  // Sum along axis 0
+col_sum.backward();
+
+// Gradient broadcast to original shape
+y.print(NDArray::PrintType::Grad);
+```
+
+## Detached Operations
+
+Some operations are **detached** from the computation graph:
+
+<Warning>
+The following operations do NOT participate in autograd:
+
+1. **`slice()`**: Returns a view with no graph linkage
+2. **`clone()`**: Creates an independent copy with no parents
+
+These are useful when you want to break gradient flow.
+</Warning>
+
+```cpp
+NDArray x({4, 4});
+x.rand();
+
+NDArray y = x * 2.0f;  // y tracks x
+
+// Slicing detaches from graph
+NDArray z = y.slice({{0, 2}, {0, 2}});
+// z.backward();  // Would not propagate gradients to x or y
+
+// Cloning detaches from graph
+NDArray w = y.clone();
+// w.backward();  // Would not propagate gradients to x or y
+```
+
+<Tip>
+To include a slice in autograd, operate on it before slicing:
+
+```cpp
+NDArray x({4, 4});
+x.rand();
+
+NDArray y = x * 2.0f;
+NDArray z = y.sum();  // Aggregate before slicing
+z.backward();         // Propagates through entire graph
+```
+</Tip>
+
+## Complete Example: Neural Network Training
+
+<CodeGroup>
+```cpp Example: Forward & Backward Pass
+#include "NDArray.h"
+#include <iostream>
+
+int main() {
+    // --- Setup ---
+    // Input: 4 samples, 3 features
+    NDArray X({4, 3});
+    X.rand(-1.0f, 1.0f);
+    
+    // Weights: 3 inputs -> 2 outputs
+    NDArray W({3, 2});
+    W.rand(-0.5f, 0.5f);
+    
+    // Bias: 1x2
+    NDArray b({1, 2});
+    b.zeros();
+    
+    // Target labels (dummy)
+    NDArray target({4, 2});
+    target.ones();
+    
+    std::cout << "Initial weights:" << std::endl;
+    W.print();
+    
+    // --- Forward Pass ---
+    NDArray Y = X * W;           // Matrix multiply: (4,3) * (3,2) = (4,2)
+    Y = Y + b;                   // Add bias: (4,2) + (1,2) = (4,2)
+    
+    std::cout << "\nPredictions:" << std::endl;
+    Y.print();
+    
+    // --- Compute Loss ---
+    // Simple loss: sum of squared differences
+    NDArray diff = Y - target;
+    NDArray squared = diff.element_wise_multiply(diff);
+    NDArray loss = squared.sum();
+    
+    std::cout << "\nLoss: ";
+    loss.print();
+    
+    // --- Backward Pass ---
+    loss.backward();
+    
+    std::cout << "\nGradient of W (dL/dW):" << std::endl;
+    W.print(NDArray::PrintType::Grad);
+    
+    std::cout << "\nGradient of b (dL/db):" << std::endl;
+    b.print(NDArray::PrintType::Grad);
+    
+    std::cout << "\nGradient of X (dL/dX):" << std::endl;
+    X.print(NDArray::PrintType::Grad);
+    
+    // --- Manual Weight Update (Gradient Descent) ---
+    float learning_rate = 0.01f;
+    for (int i = 0; i < W.size; ++i) {
+        W.data[i] -= learning_rate * W.grad[i];
+    }
+    
+    std::cout << "\nUpdated weights:" << std::endl;
+    W.print();
+    
+    return 0;
+}
+```
+</CodeGroup>
+
+## Gradient Accumulation
+
+Gradients **accumulate** in the `grad` buffer:
+
+```cpp
+NDArray x({2});
+x.fill(2.0f);
+
+// First computation
+NDArray y1 = x * 3.0f;
+y1.backward();
+
+std::cout << "After first backward:" << std::endl;
+x.print(NDArray::PrintType::Grad);
+// Output: [3, 3]
+
+// Second computation (gradients accumulate!)
+NDArray y2 = x * 5.0f;
+y2.backward();
+
+std::cout << "After second backward:" << std::endl;
+x.print(NDArray::PrintType::Grad);
+// Output: [8, 8]  (3 + 5)
+```
+
+<Warning>
+To zero gradients between iterations:
+
+```cpp
+// Manual zero
+for (int i = 0; i < x.size; ++i) {
+    x.grad[i] = 0.0f;
+}
+
+// Or use fill on a separate grad view (not built-in)
+```
+</Warning>
+
+## Graph Visualization
+
+You can inspect the computation graph:
+
+```cpp
+NDArray a({2});
+a.fill(1.0f);
+a.label = "a";
+
+NDArray b({2});
+b.fill(2.0f);
+b.label = "b";
+
+NDArray c = a + b;
+c.label = "c";
+
+NDArray d = c * 3.0f;
+d.label = "d";
+
+// Inspect metadata
+std::cout << "d.op: " << d.op << std::endl;        // Output: "elem_mul"
+std::cout << "d.prev.size(): " << d.prev.size() << std::endl;  // Output: 1
+std::cout << "c.op: " << c.op << std::endl;        // Output: "+"
+std::cout << "c.prev.size(): " << c.prev.size() << std::endl;  // Output: 2
+```
+
+## Best Practices
+
+<Steps>
+1. **Call `backward()` once per loss**: Calling it multiple times accumulates gradients
+2. **Zero gradients between iterations**: Manually reset `grad` buffers in training loops
+3. **Use scalar losses**: `backward()` is designed for scalar outputs
+4. **Avoid modifying base arrays**: Changing `data` after operations breaks the graph
+</Steps>
+
+## Limitations
+
+<Note>
+IncliArray's autograd is minimal and educational. It does not support:
+
+- Higher-order derivatives (no `grad_fn` chaining)
+- In-place operations with autograd
+- Dynamic graphs (graph is static after construction)
+- GPU acceleration
+- Custom gradient functions
+
+For production use, consider PyTorch, TensorFlow, or JAX.
+</Note>
+
+## Debugging Gradients
+
+Check gradients manually:
+
+```cpp
+NDArray x({2});
+x.fill(3.0f);
+
+NDArray y = x ^ 2.0f;  // y = x^2
+y.backward();
+
+// Analytical gradient: dy/dx = 2*x
+std::cout << "Computed gradient:" << std::endl;
+x.print(NDArray::PrintType::Grad);
+// Output: [6, 6]  (2 * 3)
+
+// Expected: 2 * 3 = 6 ✓
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Operations" icon="calculator" href="/guides/operations">
+    Learn about differentiable operations
+  </Card>
+  <Card title="Matrix Multiplication" icon="grid-2" href="/guides/matrix-multiplication">
+    Understand gradients for matmul
+  </Card>
+</CardGroup>

@@ -1,0 +1,186 @@
+---
+title: Creating Arrays
+description: Learn how to create and initialize NDArray instances in IncliArray
+---
+
+## Constructor
+
+The primary way to create an NDArray is using the constructor with a shape vector:
+
+```cpp
+#include "NDArray.h"
+
+NDArray arr({3, 4});  // Creates a 3x4 array (2D)
+NDArray vec({10});    // Creates a 1D array with 10 elements
+NDArray mat({2, 3, 4}); // Creates a 3D array
+```
+
+The constructor allocates memory for both `data` and `grad` buffers, computes row-major strides, and sets `ownsData = true`.
+
+<Note>
+Arrays created with the constructor own their memory. Only owning arrays can be filled or modified in-place. Views created by `slice()` do not own their data.
+</Note>
+
+## Initialization Methods
+
+### Zero Initialization
+
+Fill all elements with zeros:
+
+```cpp
+NDArray arr({3, 3});
+arr.zeros();
+arr.print();
+// Output:
+// [0, 0, 0]
+// [0, 0, 0]
+// [0, 0, 0]
+```
+
+### Ones Initialization
+
+Fill all elements with ones:
+
+```cpp
+NDArray arr({2, 3});
+arr.ones();
+arr.print();
+// Output:
+// [1, 1, 1]
+// [1, 1, 1]
+```
+
+### Fill with Constant
+
+Set all elements to a specific value:
+
+```cpp
+NDArray arr({2, 2});
+arr.fill(3.14f);
+arr.print();
+// Output:
+// [3.14, 3.14]
+// [3.14, 3.14]
+```
+
+### Sequential Values
+
+Fill with sequential values (0, 1, 2, ...) for testing:
+
+```cpp
+NDArray arr({2, 3});
+arr.fillSequential();
+arr.print();
+// Output:
+// [0, 1, 2]
+// [3, 4, 5]
+```
+
+## Random Initialization
+
+### Uniform Random Floats
+
+Generate random floats in [0, 1):
+
+```cpp
+NDArray arr({2, 2});
+arr.rand();
+arr.print();
+// Output (example):
+// [0.234, 0.891]
+// [0.456, 0.123]
+```
+
+Or specify a custom range [low, high):
+
+```cpp
+NDArray weights({3, 3});
+weights.rand(-0.5f, 0.5f);  // Random values in [-0.5, 0.5)
+```
+
+<Warning>
+The `rand(low, high)` method throws `std::invalid_argument` if `low >= high`.
+</Warning>
+
+### Random Integers
+
+Generate random integers in [low, high):
+
+```cpp
+NDArray labels({5});
+labels.randint(0, 10);  // Random integers from 0 to 9
+labels.print();
+// Output (example):
+// [3, 7, 1, 9, 2]
+```
+
+## Complete Example
+
+Here's a practical example creating and initializing arrays:
+
+<CodeGroup>
+```cpp Example: Create Multiple Arrays
+#include "NDArray.h"
+#include <iostream>
+
+int main() {
+    // Create input data
+    NDArray X({2, 3});
+    X.fillSequential();
+    std::cout << "X = " << std::endl;
+    X.print();
+    
+    // Create random weights
+    NDArray W({3, 2});
+    W.rand(-1.0f, 1.0f);
+    std::cout << "\nW = " << std::endl;
+    W.print();
+    
+    // Create bias initialized to zero
+    NDArray b({1, 2});
+    b.zeros();
+    std::cout << "\nb = " << std::endl;
+    b.print();
+    
+    return 0;
+}
+```
+</CodeGroup>
+
+## Ownership Requirements
+
+All initialization methods require `ownsData == true`:
+
+<Steps>
+1. Arrays created with `NDArray(shape)` constructor own their data
+2. Views created with `slice()` do NOT own their data
+3. Calling initialization methods on views throws `std::runtime_error`
+</Steps>
+
+```cpp
+NDArray base({4, 4});
+base.ones();  // OK: base owns data
+
+NDArray view = base.slice({{0, 2}, {0, 2}});
+// view.zeros();  // ERROR: Cannot fill a view or non-owning array
+```
+
+<Tip>
+Use `clone()` to create an owning copy of a view if you need to modify it:
+
+```cpp
+NDArray owningCopy = view.clone();
+owningCopy.zeros();  // OK: clone owns its data
+```
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Indexing & Slicing" icon="layer-group" href="/guides/indexing-slicing">
+    Learn how to access and slice array elements
+  </Card>
+  <Card title="Operations" icon="calculator" href="/guides/operations">
+    Perform element-wise operations on arrays
+  </Card>
+</CardGroup>

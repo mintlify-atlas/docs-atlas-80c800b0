@@ -1,0 +1,399 @@
+---
+title: 'Arithmetic Operators'
+description: 'Element-wise and scalar arithmetic operations'
+---
+
+## operator+ (array)
+
+Broadcasted element-wise addition (this + other).
+
+### Signature
+```cpp
+NDArray operator+(NDArray &other)
+```
+
+### Parameters
+<ParamField path="other" type="NDArray&" required>
+  The array to add. Broadcasting rules apply if shapes differ.
+</ParamField>
+
+### Returns
+A new NDArray containing the element-wise sum with autograd metadata.
+
+### Autograd
+Result records graph metadata and accumulates:
+- `dA += dOut` (gradient flows to this array)
+- `dB += dOut` (gradient flows to other array)
+
+Broadcasting is reversed during backpropagation.
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.fillSequential();
+
+NDArray Y({2, 3});
+Y.ones();
+
+NDArray Z = X + Y;
+Z.print();
+// [[1, 2, 3],
+//  [4, 5, 6]]
+```
+
+---
+
+## operator+ (scalar)
+
+Scalar addition (this + value). Shape-preserving operation.
+
+### Signature
+```cpp
+NDArray operator+(float value)
+```
+
+### Parameters
+<ParamField path="value" type="float" required>
+  Scalar value to add to every element.
+</ParamField>
+
+### Returns
+A new NDArray with the same shape, containing element-wise sums.
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.fillSequential();
+
+NDArray Y = X + 10;
+Y.print();
+// [[10, 11, 12],
+//  [13, 14, 15]]
+```
+
+---
+
+## operator- (array)
+
+Broadcasted element-wise subtraction (this - other).
+
+### Signature
+```cpp
+NDArray operator-(NDArray &other)
+```
+
+### Parameters
+<ParamField path="other" type="NDArray&" required>
+  The array to subtract. Broadcasting rules apply if shapes differ.
+</ParamField>
+
+### Returns
+A new NDArray containing the element-wise difference with autograd metadata.
+
+### Autograd
+Gradients accumulate as:
+- `dA += dOut`
+- `dB += -dOut`
+
+Broadcasting is reversed during backpropagation.
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.fill(10);
+
+NDArray Y({2, 3});
+Y.fillSequential();
+
+NDArray Z = X - Y;
+Z.print();
+// [[10, 9, 8],
+//  [7, 6, 5]]
+```
+
+---
+
+## operator- (scalar)
+
+Scalar subtraction (this - value). Shape-preserving operation.
+
+### Signature
+```cpp
+NDArray operator-(float value)
+```
+
+### Parameters
+<ParamField path="value" type="float" required>
+  Scalar value to subtract from every element.
+</ParamField>
+
+### Returns
+A new NDArray with the same shape, containing element-wise differences.
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.fillSequential();
+
+NDArray Y = X - 1;
+Y.print();
+// [[-1, 0, 1],
+//  [2, 3, 4]]
+```
+
+---
+
+## operator* (array)
+
+2D matrix multiplication (no broadcasting). **Not element-wise.**
+
+### Signature
+```cpp
+NDArray operator*(NDArray &other)
+```
+
+### Parameters
+<ParamField path="other" type="NDArray&" required>
+  Right-hand matrix. Must be 2D with compatible dimensions.
+</ParamField>
+
+### Returns
+A new NDArray containing the matrix product.
+
+### Exceptions
+- **std::invalid_argument** - if either input is not 2D or dimensions are incompatible
+
+### Autograd
+Implements standard matrix multiplication gradients:
+- `dA = dC * B^T`
+- `dB = A^T * dC`
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.fillSequential();
+// [[0, 1, 2],
+//  [3, 4, 5]]
+
+NDArray Y({3, 2});
+Y.ones();
+
+NDArray Z = X * Y;  // Matrix multiplication
+Z.print();
+// [[3, 3],
+//  [12, 12]]
+```
+
+### Notes
+- Both arrays must be exactly 2D
+- For element-wise multiplication, use `element_wise_multiply()`
+- Standard matrix multiplication: (m×n) * (n×p) = (m×p)
+
+---
+
+## operator* (scalar)
+
+Scalar element-wise multiplication (no broadcasting).
+
+### Signature
+```cpp
+NDArray operator*(float value)
+```
+
+### Parameters
+<ParamField path="value" type="float" required>
+  Scalar value to multiply with each element.
+</ParamField>
+
+### Returns
+A new NDArray with the same shape, containing element-wise products.
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.fillSequential();
+
+NDArray Y = X * 2;
+Y.print();
+// [[0, 2, 4],
+//  [6, 8, 10]]
+```
+
+---
+
+## operator/ (array)
+
+Broadcasted element-wise division (this / other).
+
+### Signature
+```cpp
+NDArray operator/(NDArray &other)
+```
+
+### Parameters
+<ParamField path="other" type="NDArray&" required>
+  Divisor array. Broadcasting rules apply if shapes differ.
+</ParamField>
+
+### Returns
+A new NDArray containing element-wise quotients with autograd metadata.
+
+### Autograd
+Gradients accumulate as:
+- `dA += dOut / other`
+- `dB += -(this / other^2) * dOut`
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.fillSequential();
+X = X + 1;  // [1, 2, 3, 4, 5, 6]
+
+NDArray Y({2, 3});
+Y.fill(2);
+
+NDArray Z = X / Y;
+Z.print();
+// [[0.5, 1, 1.5],
+//  [2, 2.5, 3]]
+```
+
+### Notes
+- Warns on division by zero
+- Broadcasting is reversed during backpropagation
+
+---
+
+## operator/ (scalar)
+
+Scalar division (this / value). Shape-preserving operation.
+
+### Signature
+```cpp
+NDArray operator/(float value)
+```
+
+### Parameters
+<ParamField path="value" type="float" required>
+  Scalar divisor.
+</ParamField>
+
+### Returns
+A new NDArray with the same shape, containing element-wise quotients.
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.fillSequential();
+
+NDArray Y = X / 2;
+Y.print();
+// [[0, 0.5, 1],
+//  [1.5, 2, 2.5]]
+```
+
+### Notes
+- Warns on division by zero
+
+---
+
+## operator^
+
+Scalar element-wise power (this ^ value). Raises each element to the given scalar power.
+
+### Signature
+```cpp
+NDArray operator^(float value)
+```
+
+### Parameters
+<ParamField path="value" type="float" required>
+  The exponent to apply to each element.
+</ParamField>
+
+### Returns
+A new NDArray with the same shape, containing element-wise powers.
+
+### Autograd
+Gradients accumulate as:
+- `dA += value * A^(value - 1) * dOut`
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.fillSequential();
+X = X + 1;  // [1, 2, 3, 4, 5, 6]
+
+NDArray Y = X ^ 2;
+Y.print();
+// [[1, 4, 9],
+//  [16, 25, 36]]
+```
+
+---
+
+## element_wise_multiply (array)
+
+Broadcasted element-wise multiplication. Unlike `operator*`, this performs element-wise (Hadamard) product, not matrix multiplication.
+
+### Signature
+```cpp
+NDArray element_wise_multiply(NDArray &other)
+```
+
+### Parameters
+<ParamField path="other" type="NDArray&" required>
+  Array to multiply element-wise. Broadcasting rules apply if shapes differ.
+</ParamField>
+
+### Returns
+A new NDArray containing element-wise products with autograd metadata.
+
+### Autograd
+Gradients accumulate as:
+- `dA += other * dOut`
+- `dB += this * dOut`
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.fillSequential();
+
+NDArray Y({2, 3});
+Y.fill(2);
+
+NDArray Z = X.element_wise_multiply(Y);
+Z.print();
+// [[0, 2, 4],
+//  [6, 8, 10]]
+```
+
+---
+
+## element_wise_multiply (scalar)
+
+Scalar element-wise multiplication (this * value).
+
+### Signature
+```cpp
+NDArray element_wise_multiply(float value)
+```
+
+### Parameters
+<ParamField path="value" type="float" required>
+  Scalar value to multiply with each element.
+</ParamField>
+
+### Returns
+A new NDArray with the same shape, containing element-wise products.
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.fillSequential();
+
+NDArray Y = X.element_wise_multiply(3);
+Y.print();
+// [[0, 3, 6],
+//  [9, 12, 15]]
+```

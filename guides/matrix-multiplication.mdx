@@ -1,0 +1,314 @@
+---
+title: Matrix Multiplication
+description: 2D matrix multiplication with autograd support in IncliArray
+---
+
+## Overview
+
+IncliArray provides 2D matrix multiplication through `operator*`. This is distinct from element-wise multiplication and does **not** support broadcasting.
+
+```cpp
+NDArray A({2, 3});
+A.fillSequential();  // 2x3 matrix
+
+NDArray B({3, 4});
+B.ones();  // 3x4 matrix
+
+NDArray C = A * B;  // 2x4 result
+C.metadata(true);  // Shape: (2, 4)
+```
+
+## Requirements
+
+<Warning>
+Matrix multiplication using `operator*` has strict requirements:
+
+1. **Both arrays must be 2D** (`ndim == 2`)
+2. **Inner dimensions must match** (`A.shape[1] == B.shape[0]`)
+3. **No broadcasting** is performed
+
+Violating these throws `std::invalid_argument`.
+</Warning>
+
+### Shape Rules
+
+For `C = A * B`:
+
+| Matrix | Shape | Description |
+|--------|-------|-------------|
+| A | (m, k) | m rows, k columns |
+| B | (k, n) | k rows, n columns |
+| C | (m, n) | m rows, n columns |
+
+The inner dimension `k` must match:
+
+```cpp
+// Valid
+NDArray A({2, 3});  // m=2, k=3
+NDArray B({3, 5});  // k=3, n=5
+NDArray C = A * B;  // Result: (2, 5)
+
+// Invalid
+NDArray D({2, 3});
+NDArray E({4, 5});
+// NDArray F = D * E;  // ERROR: 3 != 4 (inner dimensions mismatch)
+```
+
+## Basic Example
+
+```cpp
+NDArray A({2, 3});
+A.fillSequential();
+// [0, 1, 2]
+// [3, 4, 5]
+
+NDArray B({3, 2});
+B.fillSequential();
+// [0, 1]
+// [2, 3]
+// [4, 5]
+
+NDArray C = A * B;
+C.print();
+// Output:
+// [10, 13]
+// [28, 40]
+```
+
+**Manual verification:**
+```
+C[0,0] = 0*0 + 1*2 + 2*4 = 10
+C[0,1] = 0*1 + 1*3 + 2*5 = 13
+C[1,0] = 3*0 + 4*2 + 5*4 = 28
+C[1,1] = 3*1 + 4*3 + 5*5 = 40
+```
+
+## Difference from Element-Wise Multiply
+
+IncliArray provides two multiplication operations:
+
+| Operation | Symbol/Function | Broadcasting | Dimensions | Autograd |
+|-----------|----------------|--------------|------------|----------|
+| **Matrix multiplication** | `A * B` | No | 2D only | Yes |
+| **Element-wise multiply** | `A.element_wise_multiply(B)` | Yes | Any | Yes |
+| **Scalar multiply** | `A * scalar` | N/A | Any | Yes |
+
+### Example Comparison
+
+```cpp
+NDArray A({2, 2});
+A.fill(2.0f);
+// [2, 2]
+// [2, 2]
+
+NDArray B({2, 2});
+B.fill(3.0f);
+// [3, 3]
+// [3, 3]
+
+// Matrix multiplication: dot product
+NDArray C1 = A * B;
+C1.print();
+// Output:
+// [12, 12]  (2*3 + 2*3)
+// [12, 12]
+
+// Element-wise multiplication: Hadamard product
+NDArray C2 = A.element_wise_multiply(B);
+C2.print();
+// Output:
+// [6, 6]  (2*3)
+// [6, 6]
+```
+
+<Tip>
+**Rule of thumb:**
+- Use `A * B` for linear algebra (matrix-matrix multiply)
+- Use `A.element_wise_multiply(B)` for element-wise operations with broadcasting
+- Use `A * scalar` for scaling (equivalent to `element_wise_multiply(scalar)`)
+</Tip>
+
+## Autograd Support
+
+Matrix multiplication records gradients for backpropagation:
+
+```cpp
+NDArray A({2, 3});
+A.fillSequential();
+
+NDArray B({3, 2});
+B.ones();
+
+NDArray C = A * B;
+NDArray loss = C.sum();
+
+loss.backward();
+
+std::cout << "Gradient of A:" << std::endl;
+A.print(NDArray::PrintType::Grad);
+// Output:
+// [2, 2, 2]  (sum over columns of B)
+// [2, 2, 2]
+
+std::cout << "\nGradient of B:" << std::endl;
+B.print(NDArray::PrintType::Grad);
+// Output:
+// [3, 3]  (sum over rows of A)
+// [3, 3]
+// [3, 3]
+```
+
+### Gradient Formulas
+
+For `C = A * B`:
+
+- **dL/dA = dL/dC * B^T** (gradient w.r.t. left matrix)
+- **dL/dB = A^T * dL/dC** (gradient w.r.t. right matrix)
+
+These are computed automatically during `backward()`.
+
+## Practical Example: Neural Network
+
+<CodeGroup>
+```cpp Example: Forward and Backward Pass
+#include "NDArray.h"
+#include <iostream>
+
+int main() {
+    // Input: 2 samples, 3 features
+    NDArray X({2, 3});
+    X.rand(-1.0f, 1.0f);
+    std::cout << "Input X:" << std::endl;
+    X.print();
+    
+    // Weights: 3 inputs -> 2 outputs
+    NDArray W({3, 2});
+    W.rand(-0.5f, 0.5f);
+    std::cout << "\nWeights W:" << std::endl;
+    W.print();
+    
+    // Forward pass: Y = X * W
+    NDArray Y = X * W;
+    std::cout << "\nOutput Y:" << std::endl;
+    Y.print();
+    
+    // Simple loss: sum of all outputs
+    NDArray loss = Y.sum();
+    std::cout << "\nLoss: ";
+    loss.print();
+    
+    // Backward pass
+    loss.backward();
+    
+    // Check gradients
+    std::cout << "\nGradient of X (dL/dX):" << std::endl;
+    X.print(NDArray::PrintType::Grad);
+    
+    std::cout << "\nGradient of W (dL/dW):" << std::endl;
+    W.print(NDArray::PrintType::Grad);
+    
+    return 0;
+}
+```
+</CodeGroup>
+
+## Chaining Matrix Multiplications
+
+You can chain multiple matrix multiplications:
+
+```cpp
+NDArray A({2, 3});
+A.rand();
+
+NDArray B({3, 4});
+B.rand();
+
+NDArray C({4, 2});
+C.rand();
+
+// D = (A * B) * C
+NDArray temp = A * B;  // (2, 3) * (3, 4) = (2, 4)
+NDArray D = temp * C;  // (2, 4) * (4, 2) = (2, 2)
+
+D.metadata(true);  // Shape: (2, 2)
+
+// Backprop through the entire chain
+D.backward();
+```
+
+## Combining with Other Operations
+
+Matrix multiplication integrates seamlessly with other operations:
+
+```cpp
+// Linear layer: Y = X * W + b
+NDArray X({4, 5});
+X.rand();
+
+NDArray W({5, 3});
+W.rand();
+
+NDArray b({1, 3});  // Bias
+b.zeros();
+
+// Forward
+NDArray Y = X * W;    // Matrix multiply
+Y = Y + b;            // Broadcasting add
+
+// Compute loss and backprop
+NDArray loss = Y.sum();
+loss.backward();
+
+// All gradients available
+X.print(NDArray::PrintType::Grad);
+W.print(NDArray::PrintType::Grad);
+b.print(NDArray::PrintType::Grad);
+```
+
+## Performance Considerations
+
+<Steps>
+1. **Naive implementation**: The current implementation uses three nested loops (O(m*n*k))
+2. **Not optimized**: No BLAS, tiling, or SIMD optimizations
+3. **For learning**: Suitable for educational purposes and small matrices
+4. **Respects strides**: Works correctly with non-contiguous views
+</Steps>
+
+<Note>
+For production workloads with large matrices, consider libraries like Eigen, BLAS, or oneDNN which provide highly optimized implementations.
+</Note>
+
+## Error Handling
+
+```cpp
+// Error: Not 2D
+NDArray vec({5});
+NDArray mat({5, 3});
+// NDArray result = vec * mat;  // Throws: "Matrix multiplication is only supported for 2d arrays!"
+
+// Error: Dimension mismatch
+NDArray A({3, 4});
+NDArray B({5, 6});
+// NDArray C = A * B;  // Throws: "The column axis of first matrix and row axis of second matrix should be equal..."
+```
+
+## Key Takeaways
+
+<Tip>
+- `operator*` performs 2D matrix multiplication (dot product)
+- Both arrays must be 2D with matching inner dimensions
+- Use `element_wise_multiply()` for element-wise operations
+- Gradients flow correctly through matmul operations
+- Perfect for implementing neural network layers
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Operations" icon="calculator" href="/guides/operations">
+    Element-wise operations and reductions
+  </Card>
+  <Card title="Autograd" icon="diagram-project" href="/guides/autograd-backprop">
+    Build computation graphs and backpropagate
+  </Card>
+</CardGroup>

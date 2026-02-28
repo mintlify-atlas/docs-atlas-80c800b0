@@ -1,0 +1,197 @@
+---
+title: Installation
+description: Install IncliArray using CMake and start building array-based applications
+---
+
+# Installation
+
+IncliArray uses CMake for building and installation. You can either build the examples for development or install the library system-wide for use in your projects.
+
+## Prerequisites
+
+You'll need:
+- A C++17 compatible compiler (GCC, Clang, or MSVC)
+- CMake 3.10 or higher
+- Git (to clone the repository)
+
+## Getting the source
+
+Clone the IncliArray repository:
+
+```bash
+git clone https://github.com/inclinedadarsh/incliarray.git
+cd incliarray
+```
+
+## Build and run examples
+
+If you want to explore the examples or contribute to development, build with examples enabled:
+
+<Steps>
+  <Step title="Create build directory">
+    Create a separate build directory to keep your source tree clean:
+    
+    ```bash
+    mkdir build && cd build
+    ```
+  </Step>
+  
+  <Step title="Configure with CMake">
+    Run CMake to generate build files. By default, `BUILD_EXAMPLES` is ON:
+    
+    ```bash
+    cmake ..
+    ```
+  </Step>
+  
+  <Step title="Build the project">
+    Compile the library and examples:
+    
+    ```bash
+    make
+    ```
+  </Step>
+  
+  <Step title="Run examples">
+    Execute any of the built examples:
+    
+    ```bash
+    ./examples/basic_scalars
+    ./examples/basic_vectors
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  Examples are located in the `examples/` directory. Each example demonstrates different features like scalar operations, vector/matrix operations, and autograd.
+</Note>
+
+## Install system-wide
+
+To use IncliArray in your own projects, install it to your system:
+
+<Steps>
+  <Step title="Create build directory">
+    ```bash
+    mkdir build && cd build
+    ```
+  </Step>
+  
+  <Step title="Configure without examples">
+    Disable examples to speed up the build:
+    
+    ```bash
+    cmake .. -DBUILD_EXAMPLES=OFF
+    ```
+  </Step>
+  
+  <Step title="Install the library">
+    Install headers and library files (requires sudo on Linux/macOS):
+    
+    ```bash
+    sudo make install
+    ```
+    
+    This installs:
+    - Headers to `/usr/local/include`
+    - Library files to `/usr/local/lib`
+    - CMake config to `/usr/local/lib/cmake/NDArray`
+  </Step>
+</Steps>
+
+<Warning>
+  On Windows, you may need to run the installation command from an administrator terminal.
+</Warning>
+
+## Use in your project
+
+Once installed, you can use IncliArray in your own C++ projects.
+
+### With CMake
+
+Add these lines to your project's `CMakeLists.txt`:
+
+```cmake
+find_package(NDArray REQUIRED)
+add_executable(myapp myapp.cpp)
+target_link_libraries(myapp PRIVATE NDArray)
+```
+
+Then include the header in your code:
+
+```cpp
+#include <NDArray.h>
+
+int main() {
+  NDArray arr({3, 3});
+  arr.ones();
+  arr.print();
+  return 0;
+}
+```
+
+### With plain compiler
+
+If you're not using CMake, you can compile directly with g++ or clang:
+
+```bash
+g++ -std=c++17 myapp.cpp -lNDArray -o myapp
+```
+
+Then run your application:
+
+```bash
+./myapp
+```
+
+<Note>
+  If you installed to a custom prefix, add `-I<include_dir>` and `-L<lib_dir>` flags to specify the include and library paths.
+</Note>
+
+## Custom installation prefix
+
+To install to a custom location instead of `/usr/local`:
+
+```bash
+cmake .. -DCMAKE_INSTALL_PREFIX=/path/to/install
+make install
+```
+
+When using a custom prefix, remember to:
+- Add the include path when compiling: `-I/path/to/install/include`
+- Add the library path when linking: `-L/path/to/install/lib`
+- Update `CMAKE_PREFIX_PATH` when using CMake's `find_package()`
+
+## Verify installation
+
+Create a simple test file to verify your installation:
+
+```cpp test.cpp
+#include <NDArray.h>
+#include <iostream>
+
+int main() {
+  NDArray test({2, 2});
+  test.fillSequential();
+  std::cout << "IncliArray is installed correctly!" << std::endl;
+  test.print();
+  return 0;
+}
+```
+
+Compile and run:
+
+```bash
+g++ -std=c++17 test.cpp -lNDArray -o test
+./test
+```
+
+You should see output showing a 2x2 matrix with sequential values.
+
+## Next steps
+
+<CardGroup cols={1}>
+  <Card title="Quick start tutorial" icon="rocket" href="/quickstart">
+    Learn how to create arrays, perform operations, and use autograd
+  </Card>
+</CardGroup>

@@ -1,0 +1,263 @@
+---
+title: Indexing & Slicing
+description: Access and manipulate array elements using multi-dimensional indexing and slicing
+---
+
+## Multi-Dimensional Indexing
+
+### Reading Elements
+
+Use `get()` with a vector of indices to read elements:
+
+```cpp
+NDArray arr({3, 4});
+arr.fillSequential();
+
+float value = arr.get({1, 2});  // Row 1, column 2
+std::cout << value << std::endl;  // Output: 6
+
+// Access in 3D
+NDArray tensor({2, 3, 4});
+tensor.fillSequential();
+float val = tensor.get({0, 1, 2});  // [batch=0, row=1, col=2]
+```
+
+The indices vector must have exactly `ndim` elements:
+
+```cpp
+NDArray mat({3, 3});
+// mat.get({1});      // ERROR: Expected 2 indices, got 1
+// mat.get({1, 2, 3}); // ERROR: Expected 2 indices, got 3
+```
+
+### Writing Elements
+
+Use `set()` to modify individual elements:
+
+```cpp
+NDArray arr({2, 2});
+arr.zeros();
+
+arr.set({0, 0}, 1.0f);
+arr.set({1, 1}, 2.0f);
+
+arr.print();
+// Output:
+// [1, 0]
+// [0, 2]
+```
+
+## Flat Indexing
+
+For contiguous, owning arrays, you can use flat (1D) indexing:
+
+```cpp
+NDArray arr({2, 3});
+arr.fillSequential();
+// Memory layout: [0, 1, 2, 3, 4, 5]
+
+float val = arr.get(4);  // Gets element at flat index 4 (value: 4)
+arr.set(3, 99.0f);       // Sets element at flat index 3 to 99
+
+arr.print();
+// Output:
+// [0, 1, 2]
+// [99, 4, 5]
+```
+
+<Warning>
+Flat indexing only works on contiguous, owning arrays. Using it on views throws:
+```
+std::runtime_error: Flat indexing only valid on base arrays.
+```
+</Warning>
+
+### Checking Contiguity
+
+Use `isContiguous()` to verify if flat indexing is safe:
+
+```cpp
+NDArray base({4, 4});
+base.fillSequential();
+
+if (base.isContiguous() && base.ownsData) {
+    float val = base.get(7);  // Safe
+}
+
+NDArray sliced = base.slice({{1, 3}, {1, 3}});
+if (!sliced.isContiguous()) {
+    // Use multi-dimensional indexing instead
+    float val = sliced.get({0, 0});
+}
+```
+
+## Slicing Arrays
+
+Create non-owning views into arrays with `slice()`:
+
+```cpp
+NDArray arr({4, 4});
+arr.fillSequential();
+// arr is:
+// [0,  1,  2,  3]
+// [4,  5,  6,  7]
+// [8,  9, 10, 11]
+// [12, 13, 14, 15]
+
+// Extract 2x2 subarray at top-left
+NDArray view = arr.slice({{0, 2}, {0, 2}});
+view.print();
+// Output:
+// [0, 1]
+// [4, 5]
+```
+
+### Slicing Syntax
+
+Slices are specified as `{start, stop}` pairs (start inclusive, stop exclusive):
+
+<Steps>
+1. Provide one `{start, stop}` tuple per dimension
+2. Start index is inclusive
+3. Stop index is exclusive (like Python slicing)
+4. Must provide exactly `ndim` slice tuples
+</Steps>
+
+```cpp
+NDArray arr({5, 6});
+arr.fillSequential();
+
+// Get rows 1-3, columns 2-5
+NDArray sub = arr.slice({{1, 4}, {2, 6}});
+// Shape: (3, 4)
+
+// Get middle column
+NDArray col = arr.slice({{0, 5}, {2, 3}});
+// Shape: (5, 1)
+```
+
+### Slicing Higher Dimensions
+
+Slicing works with any number of dimensions:
+
+```cpp
+NDArray tensor({3, 4, 5});
+tensor.rand();
+
+// Extract a 2x3x4 subtensor
+NDArray sub = tensor.slice({{0, 2}, {1, 4}, {0, 4}});
+sub.metadata(true);  // Shape: (2, 3, 4)
+```
+
+## Views vs Copies
+
+<Note>
+**Important:** `slice()` returns a non-owning view that shares memory with the base array. Changes to the base affect the view and vice versa.
+</Note>
+
+```cpp
+NDArray base({3, 3});
+base.ones();
+
+NDArray view = base.slice({{1, 2}, {1, 2}});
+view.set({0, 0}, 99.0f);  // Modifies base array!
+
+base.print();
+// Output:
+// [1, 1, 1]
+// [1, 99, 1]  // <-- Changed!
+// [1, 1, 1]
+```
+
+### Creating Copies
+
+Use `clone()` to create an independent owning copy:
+
+```cpp
+NDArray base({3, 3});
+base.fillSequential();
+
+NDArray view = base.slice({{0, 2}, {0, 2}});
+NDArray copy = view.clone();  // Independent copy
+
+copy.set({0, 0}, -1.0f);
+// base is unchanged
+```
+
+## Accessing Gradients
+
+Both `get()` methods support reading gradients:
+
+```cpp
+NDArray X({2, 2});
+X.ones();
+
+NDArray Y = X * 2.0f;
+Y.backward();
+
+// Read gradient by multi-dimensional index
+float grad = X.get({0, 1}, NDArray::PrintType::Grad);
+std::cout << grad << std::endl;  // Output: 2
+
+// Print all gradients
+X.print(NDArray::PrintType::Grad);
+```
+
+## Complete Example
+
+<CodeGroup>
+```cpp Example: Working with Slices
+#include "NDArray.h"
+#include <iostream>
+
+int main() {
+    // Create a 4x4 array
+    NDArray matrix({4, 4});
+    matrix.fillSequential();
+    
+    std::cout << "Original matrix:" << std::endl;
+    matrix.print();
+    
+    // Extract top-right quadrant
+    NDArray topRight = matrix.slice({{0, 2}, {2, 4}});
+    std::cout << "\nTop-right quadrant:" << std::endl;
+    topRight.print();
+    
+    // Modify the view
+    topRight.set({0, 0}, 100.0f);
+    
+    std::cout << "\nMatrix after modifying view:" << std::endl;
+    matrix.print();
+    
+    // Create independent copy
+    NDArray independent = topRight.clone();
+    independent.set({1, 1}, 200.0f);
+    
+    std::cout << "\nOriginal still unchanged:" << std::endl;
+    topRight.print();
+    
+    return 0;
+}
+```
+</CodeGroup>
+
+## Key Points
+
+<Tip>
+- Use multi-dimensional `get()`/`set()` for all array types
+- Flat indexing only works on contiguous, owning arrays
+- `slice()` creates views that share memory
+- Use `clone()` when you need independent copies
+- Views are detached from autograd (see [Autograd guide](/guides/autograd-backprop))
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Operations" icon="calculator" href="/guides/operations">
+    Perform element-wise operations and reductions
+  </Card>
+  <Card title="Broadcasting" icon="expand" href="/guides/broadcasting">
+    Understand broadcasting rules for array operations
+  </Card>
+</CardGroup>

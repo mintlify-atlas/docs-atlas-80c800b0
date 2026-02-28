@@ -1,0 +1,208 @@
+---
+title: 'Indexing & Slicing'
+description: 'Accessing and modifying array elements'
+---
+
+## get (multi-dimensional)
+
+Read an element by multi-dimensional indices.
+
+### Signature
+```cpp
+float get(std::vector<int> indices, PrintType type = PrintType::Data) const
+```
+
+### Parameters
+<ParamField path="indices" type="std::vector<int>" required>
+  A vector of length `ndim` specifying the coordinate. For example, `{0, 2}` accesses row 0, column 2 in a 2D array.
+</ParamField>
+
+<ParamField path="type" type="PrintType">
+  Whether to read from the `data` or `grad` buffer. Defaults to `PrintType::Data`.
+</ParamField>
+
+### Returns
+The element value at the specified coordinate.
+
+### Exceptions
+- **std::invalid_argument** - if `indices.size() != ndim`
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.fillSequential();
+// X = [[0, 1, 2],
+//      [3, 4, 5]]
+
+float val = X.get({1, 2});  // 5.0
+float grad_val = X.get({0, 1}, NDArray::PrintType::Grad);
+```
+
+---
+
+## get (flat index)
+
+Read an element by flat index. **Valid only for contiguous, owning arrays.** Treats memory as a flat buffer regardless of shape.
+
+### Signature
+```cpp
+float get(int index, PrintType type = PrintType::Data) const
+```
+
+### Parameters
+<ParamField path="index" type="int" required>
+  Flat position in the range [0, size). Index 0 is the first element, index 1 is the second, etc.
+</ParamField>
+
+<ParamField path="type" type="PrintType">
+  Whether to read from the `data` or `grad` buffer. Defaults to `PrintType::Data`.
+</ParamField>
+
+### Returns
+The element value at the flat index position.
+
+### Exceptions
+- **std::out_of_range** - if index is outside [0, size)
+- **std::runtime_error** - if the array is not contiguous or not owning
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.fillSequential();
+
+float val = X.get(4);  // 4.0 (row 1, col 1)
+```
+
+### Notes
+- Primarily for debugging and demos
+- Requires the array to be both contiguous and owning
+- Use multi-dimensional `get()` for general-purpose access
+
+---
+
+## set (multi-dimensional)
+
+Write an element by multi-dimensional indices.
+
+### Signature
+```cpp
+void set(std::vector<int> indices, float value)
+```
+
+### Parameters
+<ParamField path="indices" type="std::vector<int>" required>
+  Coordinate of the element (length must equal `ndim`).
+</ParamField>
+
+<ParamField path="value" type="float" required>
+  Value to write into the data buffer.
+</ParamField>
+
+### Returns
+Void.
+
+### Exceptions
+- **std::invalid_argument** - if `indices.size() != ndim`
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.zeros();
+
+X.set({0, 1}, 42.0);
+X.set({1, 2}, 99.0);
+
+X.print();
+// [[0, 42, 0],
+//  [0, 0, 99]]
+```
+
+---
+
+## set (flat index)
+
+Write an element by flat index. **Valid only for contiguous, owning arrays.**
+
+### Signature
+```cpp
+void set(int index, float value)
+```
+
+### Parameters
+<ParamField path="index" type="int" required>
+  Flat position in the range [0, size).
+</ParamField>
+
+<ParamField path="value" type="float" required>
+  Value to write into the data buffer.
+</ParamField>
+
+### Returns
+Void.
+
+### Exceptions
+- **std::out_of_range** - if index is outside [0, size)
+- **std::runtime_error** - if the array is not contiguous or not owning
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.zeros();
+
+X.set(0, 1.0);
+X.set(5, 9.0);
+
+X.print();
+// [[1, 0, 0],
+//  [0, 0, 9]]
+```
+
+### Notes
+- Writes into underlying memory ignoring shape
+- Requires the array to be both contiguous and owning
+
+---
+
+## slice
+
+Return a non-owning view restricted by per-axis [start, stop) slices. The returned NDArray shares `data` with the base tensor and has updated shape/strides/offset.
+
+**Important:** The slice is **DETACHED from autograd** - no computation graph is recorded and its `_backward` is a no-op.
+
+### Signature
+```cpp
+NDArray slice(std::vector<std::tuple<int, int>> indices)
+```
+
+### Parameters
+<ParamField path="indices" type="std::vector<std::tuple<int, int>>" required>
+  A vector (length must equal `ndim`) of (start, stop) pairs. Each pair specifies an inclusive start and exclusive stop for one axis.
+</ParamField>
+
+### Returns
+A detached, non-owning view (NDArray with `ownsData = false`).
+
+### Exceptions
+- **std::invalid_argument** - if the number of slices != ndim
+
+### Example
+```cpp
+NDArray X({4, 5});
+X.fillSequential();
+
+// Extract rows 1-2, columns 2-4
+NDArray view = X.slice({{1, 3}, {2, 5}});
+// view.shape = {2, 3}
+// view.ownsData = false
+
+view.print();
+// [[7, 8, 9],
+//  [12, 13, 14]]
+```
+
+### Notes
+- The view shares memory with the parent array
+- Modifications to the view affect the parent (and vice versa)
+- The view is detached: it cannot participate in autograd
+- Use `clone()` to materialize a slice into an owning, independent array
+- Slice syntax is inclusive start, exclusive stop (like Python)

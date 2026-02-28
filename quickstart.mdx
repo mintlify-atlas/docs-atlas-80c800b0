@@ -1,80 +1,360 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick start
+description: Learn the basics of IncliArray by building your first array program with autograd
 ---
 
-## Get started in three steps
+# Quick start
 
-Get your documentation site running locally and make your first customization.
+This tutorial walks you through creating arrays, performing operations, and using automatic differentiation. By the end, you'll understand the core concepts of IncliArray.
 
-### Step 1: Set up your local environment
+## Your first program
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+Let's start with a simple scalar computation that demonstrates autograd:
+
+<Steps>
+  <Step title="Create a source file">
+    Create a file called `first_program.cpp`:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    ```cpp first_program.cpp
+    #include <NDArray.h>
+    #include <iostream>
+
+    int main() {
+      // Create a scalar (1-element array)
+      NDArray X({1});
+      X.randint(1, 10);
+      
+      std::cout << "X = ";
+      X.print();
+      
+      // Build a computation: Z = (X * 2) + 10
+      NDArray Y = X * 2;
+      NDArray Z = Y + 10;
+      
+      // Backpropagate to compute gradients
+      Z.backward();
+      
+      // View the gradient of X
+      std::cout << "Grad X = ";
+      X.print(NDArray::PrintType::Grad);
+      
+      return 0;
+    }
+    ```
+  </Step>
+  
+  <Step title="Compile the program">
+    Compile with C++17 and link against IncliArray:
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+    ```bash
+    g++ -std=c++17 first_program.cpp -lNDArray -o first_program
+    ```
+  </Step>
+  
+  <Step title="Run it">
+    Execute your program:
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    ```bash
+    ./first_program
+    ```
+    
+    You'll see the initial value of X and its gradient (which should be 2, since dZ/dX = 2).
+  </Step>
+</Steps>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+<Note>
+  The gradient is 2 because Z = 2X + 10, so dZ/dX = 2. This is automatic differentiation in action!
+</Note>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+## Creating arrays
 
-### Step 3: Go live
+IncliArray supports N-dimensional arrays. You create them by specifying a shape:
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+```cpp
+// Scalar (1 element)
+NDArray scalar({1});
+
+// Vector (3 elements)
+NDArray vector({3});
+
+// Matrix (2 rows, 3 columns)
+NDArray matrix({2, 3});
+
+// 3D tensor (2x3x4)
+NDArray tensor({2, 3, 4});
+```
+
+## Initializing arrays
+
+There are several ways to fill arrays with data:
+
+```cpp
+NDArray A({2, 3});
+
+// Fill with zeros
+A.zeros();
+
+// Fill with ones
+A.ones();
+
+// Fill with sequential values: 0, 1, 2, 3, 4, 5
+A.fillSequential();
+
+// Fill with a constant value
+A.fill(3.14f);
+
+// Fill with random integers in [1, 10)
+A.randint(1, 10);
+
+// Fill with random floats in [0, 1)
+A.rand();
+
+// Fill with random floats in [0.5, 2.5)
+A.rand(0.5f, 2.5f);
+```
+
+## Accessing elements
+
+You can access elements using multi-dimensional indices or flat indexing:
+
+```cpp
+NDArray M({2, 3});
+M.fillSequential();  // [0, 1, 2, 3, 4, 5]
+
+// Multi-dimensional indexing (always works)
+float val = M.get({0, 1});  // Get element at row 0, col 1
+M.set({1, 2}, 99.0f);       // Set element at row 1, col 2
+
+// Flat indexing (only for contiguous, owning arrays)
+float val2 = M.get(0);  // Get first element
+M.set(5, 42.0f);        // Set last element
+```
+
+## Arithmetic operations
+
+<Steps>
+  <Step title="Element-wise operations">
+    Operations between arrays use broadcasting, just like NumPy:
+    
+    ```cpp
+    NDArray A({2, 3});
+    A.fillSequential();  // [[0, 1, 2], [3, 4, 5]]
+    
+    NDArray B({1, 3});
+    B.ones();  // [[1, 1, 1]]
+    
+    // Broadcasting: B is broadcast to match A's shape
+    NDArray C = A + B;  // [[1, 2, 3], [4, 5, 6]]
+    NDArray D = A - B;  // [[-1, 0, 1], [2, 3, 4]]
+    NDArray E = A / B;  // [[0, 1, 2], [3, 4, 5]]
+    NDArray F = A.element_wise_multiply(B);  // [[0, 1, 2], [3, 4, 5]]
+    ```
+  </Step>
+  
+  <Step title="Scalar operations">
+    Operations with scalar values:
+    
+    ```cpp
+    NDArray A({2, 3});
+    A.ones();
+    
+    NDArray B = A + 5.0f;   // Add 5 to every element
+    NDArray C = A - 2.0f;   // Subtract 2 from every element
+    NDArray D = A * 3.0f;   // Multiply every element by 3
+    NDArray E = A / 2.0f;   // Divide every element by 2
+    NDArray F = A ^ 2.0f;   // Square every element (power)
+    ```
+  </Step>
+  
+  <Step title="Matrix multiplication">
+    Use the `*` operator for 2D matrix multiplication:
+    
+    ```cpp
+    NDArray X({2, 3});
+    X.fillSequential();
+    
+    NDArray Y({3, 2});
+    Y.randint(1, 10);
+    
+    // Matrix multiply: (2x3) * (3x2) = (2x2)
+    NDArray Z = X * Y;
+    ```
+  </Step>
+</Steps>
+
+## Reduction operations
+
+Reduce arrays along dimensions:
+
+```cpp
+NDArray A({2, 3});
+A.ones();
+
+// Sum all elements to a scalar
+NDArray total = A.sum();  // Shape: {1}, Value: 6.0
+
+// Sum along axis 0 (collapse rows)
+NDArray colSums = A.sum(0);  // Shape: {1, 3}, Values: [2, 2, 2]
+
+// Sum along axis 1 (collapse columns)
+NDArray rowSums = A.sum(1);  // Shape: {2, 1}, Values: [3, 3]
+
+// Negative indexing works too
+NDArray rowSums2 = A.sum(-1);  // Same as sum(1)
+```
+
+## Automatic differentiation
+
+IncliArray automatically builds a computation graph and can compute gradients:
+
+<Steps>
+  <Step title="Build a computation graph">
+    Create arrays and perform operations. Each operation records its inputs:
+    
+    ```cpp
+    // Create input matrices
+    NDArray X({2, 3});
+    X.fillSequential();
+    
+    NDArray Y({3, 2});
+    Y.randint(1, 10);
+    
+    // Build computation: result = (X * Y) + 10
+    NDArray Z = X * Y;         // Matrix multiplication
+    NDArray result = Z + 10.0f;  // Scalar addition
+    ```
+  </Step>
+  
+  <Step title="Compute gradients">
+    Call `backward()` on the output to compute gradients:
+    
+    ```cpp
+    // Compute gradients for all inputs
+    result.backward();
+    ```
+    
+    This performs reverse-mode automatic differentiation, computing gradients of the output with respect to all inputs.
+  </Step>
+  
+  <Step title="Access gradients">
+    View the computed gradients using `print()`:
+    
+    ```cpp
+    std::cout << "Gradient of X:" << std::endl;
+    X.print(NDArray::PrintType::Grad);
+    
+    std::cout << "\nGradient of Y:" << std::endl;
+    Y.print(NDArray::PrintType::Grad);
+    ```
+    
+    Gradients are stored in the `grad` buffer of each array.
+  </Step>
+</Steps>
+
+## Complete example
+
+Here's a complete program demonstrating matrix operations with autograd:
+
+```cpp example.cpp
+#include <NDArray.h>
+#include <iostream>
+
+int main() {
+  // Create a 2x3 matrix
+  NDArray X({2, 3});
+  X.fillSequential();
+  std::cout << "X = " << std::endl;
+  X.print();
+  
+  // Create a 3x2 matrix with random values
+  NDArray Y({3, 2});
+  Y.randint(1, 10);
+  std::cout << "\nY = " << std::endl;
+  Y.print();
+  
+  // Matrix multiply: (2x3) * (3x2) = (2x2)
+  NDArray Z = X * Y;
+  std::cout << "\nZ = X * Y = " << std::endl;
+  Z.print();
+  
+  // Add scalar
+  NDArray result = Z + 10.0f;
+  std::cout << "\nresult = Z + 10 = " << std::endl;
+  result.print();
+  
+  // Backpropagate
+  result.backward();
+  
+  // View gradients
+  std::cout << "\nGrad X = " << std::endl;
+  X.print(NDArray::PrintType::Grad);
+  
+  std::cout << "\nGrad Y = " << std::endl;
+  Y.print(NDArray::PrintType::Grad);
+  
+  return 0;
+}
+```
+
+<Warning>
+  Slices and clones are **detached** from the computation graph. They won't participate in autograd unless you perform new operations on them.
+</Warning>
+
+## Array views and cloning
+
+Create memory-efficient views or independent copies:
+
+```cpp
+NDArray A({4, 4});
+A.fillSequential();
+
+// Create a non-owning view (shares memory, detached from autograd)
+NDArray view = A.slice({{0, 2}, {0, 2}});  // Top-left 2x2 block
+
+// Create an owning copy (independent memory, detached from autograd)
+NDArray copy = A.clone();
+
+// Check if array is contiguous
+bool isContig = A.isContiguous();  // true for newly created arrays
+```
+
+## Reshaping
+
+Change the shape of contiguous arrays:
+
+```cpp
+NDArray A({2, 3});
+A.fillSequential();  // [[0, 1, 2], [3, 4, 5]]
+
+// Reshape to 3x2 (must have same number of elements)
+A.reshape({3, 2});   // [[0, 1], [2, 3], [4, 5]]
+
+// Reshape to 1D vector
+A.reshape({6});      // [0, 1, 2, 3, 4, 5]
+```
+
+<Note>
+  Reshaping only works on contiguous, owning arrays. Views cannot be reshaped.
+</Note>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
+Now that you understand the basics, explore more:
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="API reference" icon="book" href="/api/constructor">
+    Detailed documentation of all classes and methods
+  </Card>
+  
+  <Card title="Examples" icon="code" href="/examples/basic-scalar">
+    More complex examples including neural network training
+  </Card>
+  
+  <Card title="Core concepts" icon="lightbulb" href="/concepts/arrays">
+    Deep dive into memory management, broadcasting, and autograd
+  </Card>
+  
+  <Card title="GitHub repository" icon="github" href="https://github.com/inclinedadarsh/incliarray">
+    View source code and contribute
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

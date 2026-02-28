@@ -1,0 +1,257 @@
+---
+title: 'Automatic Differentiation'
+description: 'Autograd system for computing gradients'
+---
+
+## Overview
+
+IncliArray provides lightweight reverse-mode automatic differentiation (autograd) for computing gradients. The autograd system automatically builds a computation graph and computes gradients via backpropagation.
+
+### Key Concepts
+
+- **Computation Graph**: Operations create new NDArray instances linked to their inputs via the `prev` field
+- **Detached Tensors**: Slices and clones are detached (no graph linkage)
+- **Gradient Accumulation**: The `grad` buffer accumulates gradients during backpropagation
+- **Chain Rule**: Each operation defines a `_backward` function that applies the chain rule
+
+---
+
+## backward
+
+Reverse-mode backpropagation: accumulate gradients into all reachable parents from this node.
+
+### Signature
+```cpp
+void backward()
+```
+
+### Parameters
+None.
+
+### Returns
+Void. Gradients are accumulated in the `grad` buffers of all nodes in the graph.
+
+### Algorithm
+1. Sets `this->grad` to all ones (∂out/∂out = 1)
+2. Builds a topological ordering of the computation graph
+3. Walks the graph in reverse topological order
+4. Invokes each node's `_backward` closure to accumulate gradients
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.fillSequential();
+
+NDArray Y({2, 3});
+Y.ones();
+
+NDArray Z = X + Y;      // Z = X + Y
+NDArray W = Z * 2.0;    // W = 2 * (X + Y)
+NDArray result = W.sum();  // scalar output
+
+result.backward();
+
+std::cout << "Gradient of X:" << std::endl;
+X.print(NDArray::PrintType::Grad);
+// [[2, 2, 2],
+//  [2, 2, 2]]
+
+std::cout << "Gradient of Y:" << std::endl;
+Y.print(NDArray::PrintType::Grad);
+// [[2, 2, 2],
+//  [2, 2, 2]]
+```
+
+### Notes
+- Call `backward()` only on scalar outputs (1-element arrays) or leaf nodes
+- Gradients accumulate - call this only once per forward pass, or zero gradients between calls
+- Only reachable nodes in the computation graph receive gradients
+- Detached tensors (slices, clones) do not participate in backpropagation
+
+---
+
+## _backward
+
+Backpropagation closure invoked during `backward()`. This function is set by each operation to implement the local gradient computation according to the chain rule.
+
+### Type
+```cpp
+std::function<void()> _backward
+```
+
+### Usage
+This field is automatically set by operations. Users typically don't need to interact with it directly.
+
+### Example Operation Implementation
+```cpp
+// Conceptual example of how addition sets _backward
+NDArray A({2, 3});
+NDArray B({2, 3});
+NDArray C = A + B;
+
+// Internally, operator+ sets:
+// C._backward = [&A, &B, &C]() {
+//   // dA += dC (with broadcasting if needed)
+//   // dB += dC (with broadcasting if needed)
+// };
+```
+
+### Notes
+- Each operation defines its own `_backward` closure
+- The closure captures references to parent nodes and the current node
+- For detached tensors (slices, clones), `_backward` is a no-op
+
+---
+
+## prev
+
+Parents in the autograd graph. Contains references to the input arrays that produced this result.
+
+### Type
+```cpp
+std::vector<std::reference_wrapper<NDArray>> prev
+```
+
+### Usage
+Empty for:
+- Base arrays (created by constructor)
+- Detached tensors (slices, clones)
+
+Populated for:
+- Operation results (addition, multiplication, etc.)
+
+### Example
+```cpp
+NDArray X({2, 3});
+NDArray Y({2, 3});
+NDArray Z = X + Y;
+
+std::cout << X.prev.size();  // 0 (base array)
+std::cout << Y.prev.size();  // 0 (base array)
+std::cout << Z.prev.size();  // 2 (has parents X and Y)
+```
+
+### Notes
+- Used internally by `backward()` to build the computation graph
+- References are stored, not copies, so parent arrays must outlive the result
+
+---
+
+## op
+
+Operation tag for debug/inspection. Records the operation that produced this array.
+
+### Type
+```cpp
+std::string op
+```
+
+### Common Values
+- `"+"` - Addition
+- `"-"` - Subtraction
+- `"*"` - Matrix multiplication
+- `"/"` - Division
+- `"^"` - Power
+- `"elem_mul"` - Element-wise multiplication
+- `"sum"` - Reduction sum
+- Empty string for base arrays
+
+### Example
+```cpp
+NDArray X({2, 3});
+std::cout << X.op;  // "" (base array)
+
+NDArray Y = X + 10;
+std::cout << Y.op;  // "+"
+
+NDArray Z = X * 2;
+std::cout << Z.op;  // "*"
+```
+
+### Notes
+- Useful for debugging and visualizing computation graphs
+- Set automatically by operations
+
+---
+
+## grad
+
+Gradient buffer aligned with logical indexing. Accumulates gradients during backpropagation.
+
+### Type
+```cpp
+float *grad
+```
+
+### Usage
+Allocated when the array is constructed, parallel to `data`. Gradients are accumulated (not overwritten) during `backward()`.
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.fillSequential();
+
+NDArray Y = X * 2;
+NDArray Z = Y.sum();
+
+Z.backward();
+
+// Access gradients via print
+X.print(NDArray::PrintType::Grad);
+// [[2, 2, 2],
+//  [2, 2, 2]]
+
+// Or via get
+float grad_val = X.get({0, 0}, NDArray::PrintType::Grad);
+std::cout << grad_val;  // 2.0
+```
+
+### Notes
+- Gradients accumulate - multiple `backward()` calls will sum gradients
+- To reset, manually zero the gradient buffer or create a new array
+- Size matches `data` buffer (same number of elements)
+
+---
+
+## Complete Autograd Example
+
+```cpp
+#include "NDArray.h"
+#include <iostream>
+
+int main() {
+  // Create input arrays
+  NDArray X({2, 3});
+  X.fillSequential();
+  // X = [[0, 1, 2],
+  //      [3, 4, 5]]
+
+  NDArray Y({3, 2});
+  Y.randint(1, 10);
+
+  // Build computation graph
+  NDArray Z = X * Y;        // Matrix multiplication
+  NDArray W = Z + 10;       // Add scalar
+  NDArray result = W.sum(); // Scalar output
+
+  // Compute gradients
+  result.backward();
+
+  // Inspect gradients
+  std::cout << "Gradient of X:" << std::endl;
+  X.print(NDArray::PrintType::Grad);
+
+  std::cout << "\nGradient of Y:" << std::endl;
+  Y.print(NDArray::PrintType::Grad);
+
+  // Check computation graph
+  std::cout << "\nOperation tags:" << std::endl;
+  std::cout << "X.op: " << X.op << std::endl;      // ""
+  std::cout << "Y.op: " << Y.op << std::endl;      // ""
+  std::cout << "Z.op: " << Z.op << std::endl;      // "*"
+  std::cout << "W.op: " << W.op << std::endl;      // "+"
+  std::cout << "result.op: " << result.op << std::endl; // "sum"
+
+  return 0;
+}
+```

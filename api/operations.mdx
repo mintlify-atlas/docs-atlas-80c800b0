@@ -1,0 +1,228 @@
+---
+title: 'Array Operations'
+description: 'Reduction, reshaping, and utility operations'
+---
+
+## sum (total)
+
+Reduce all elements to a scalar sum.
+
+### Signature
+```cpp
+NDArray sum()
+```
+
+### Parameters
+None.
+
+### Returns
+A 1-element NDArray (shape `{1}`) holding the total sum.
+
+### Autograd
+Distributes the upstream gradient uniformly to every input element:
+- `dA += 1 * dOut` for each element
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.fillSequential();
+// [[0, 1, 2],
+//  [3, 4, 5]]
+
+NDArray total = X.sum();
+total.print();  // [15]
+
+total.backward();
+X.print(NDArray::PrintType::Grad);
+// [[1, 1, 1],
+//  [1, 1, 1]]
+```
+
+---
+
+## sum (axis)
+
+Sum along a specified axis, keeping the dimension as size 1.
+
+### Signature
+```cpp
+NDArray sum(int axis)
+```
+
+### Parameters
+<ParamField path="axis" type="int" required>
+  The axis along which to compute the sum. Supports negative indices (Python-style: -1 for last axis, -2 for second-to-last, etc.).
+</ParamField>
+
+### Returns
+A new NDArray where the output shape matches the input except `shape[axis] == 1`.
+
+### Exceptions
+- **std::invalid_argument** - if axis is out of range after normalization
+
+### Autograd
+Broadcasts upstream gradient across the reduced axis into the input gradient.
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.fillSequential();
+// [[0, 1, 2],
+//  [3, 4, 5]]
+
+// Sum along axis 0 (rows)
+NDArray Y = X.sum(0);
+Y.print();  // [[3, 5, 7]]  (shape: {1, 3})
+
+// Sum along axis 1 (columns)
+NDArray Z = X.sum(1);
+Z.print();
+// [[3],
+//  [12]]  (shape: {2, 1})
+
+// Negative indexing: -1 means last axis
+NDArray W = X.sum(-1);  // Same as X.sum(1)
+```
+
+### Notes
+- The reduced dimension is kept as size 1 (not removed)
+- Negative axes are normalized: `-1` → `ndim-1`, `-2` → `ndim-2`, etc.
+- Useful for computing row sums, column sums, etc.
+
+---
+
+## reshape
+
+Reshape this array to a new shape with the same number of elements. **Only allowed for owning, contiguous arrays.**
+
+### Signature
+```cpp
+void reshape(std::vector<int> newShape)
+```
+
+### Parameters
+<ParamField path="newShape" type="std::vector<int>" required>
+  Target shape. The product of dimensions must equal the current `size`.
+</ParamField>
+
+### Returns
+Void. Modifies the array in-place.
+
+### Exceptions
+- **std::runtime_error** - if the array is not owning or not contiguous
+- **std::invalid_argument** - if newShape is empty or has incompatible size
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.fillSequential();
+// [[0, 1, 2],
+//  [3, 4, 5]]
+
+X.reshape({3, 2});
+X.print();
+// [[0, 1],
+//  [2, 3],
+//  [4, 5]]
+
+X.reshape({6});  // Flatten to 1D
+X.print();  // [0, 1, 2, 3, 4, 5]
+```
+
+### Notes
+- Modifies `shape` and recomputes `strides` to standard row-major layout
+- Does not move data in memory - only reinterprets the layout
+- Product of new dimensions must equal current `size`
+- Cannot reshape views/slices - use `clone()` first to materialize
+
+---
+
+## metadata
+
+Print selected metadata fields for inspection and debugging.
+
+### Signature
+```cpp
+void metadata(bool shapeInfo = true, bool stridesInfo = false,
+              bool ndimInfo = false, bool sizeInfo = false,
+              bool ownsDataInfo = false)
+```
+
+### Parameters
+<ParamField path="shapeInfo" type="bool">
+  Whether to print shape. Defaults to `true`.
+</ParamField>
+
+<ParamField path="stridesInfo" type="bool">
+  Whether to print strides (row-major steps). Defaults to `false`.
+</ParamField>
+
+<ParamField path="ndimInfo" type="bool">
+  Whether to print number of dimensions. Defaults to `false`.
+</ParamField>
+
+<ParamField path="sizeInfo" type="bool">
+  Whether to print total size (element count). Defaults to `false`.
+</ParamField>
+
+<ParamField path="ownsDataInfo" type="bool">
+  Whether to print ownership flag. Defaults to `false`.
+</ParamField>
+
+### Returns
+Void. Outputs to standard output.
+
+### Example
+```cpp
+NDArray X({2, 3});
+
+// Print only shape (default)
+X.metadata();
+// Output: shape: [2, 3]
+
+// Print multiple fields
+X.metadata(true, true, true, true, true);
+// Output:
+// shape: [2, 3]
+// strides: [3, 1]
+// ndim: 2
+// size: 6
+// ownsData: 1
+```
+
+---
+
+## isContiguous
+
+Check whether the logical layout matches standard row-major contiguous strides for the current shape.
+
+### Signature
+```cpp
+bool isContiguous() const
+```
+
+### Parameters
+None.
+
+### Returns
+`true` if the array has standard row-major contiguous strides, `false` otherwise.
+
+### Example
+```cpp
+NDArray X({2, 3});
+std::cout << X.isContiguous();  // true
+
+// Create a non-contiguous view
+NDArray view = X.slice({{0, 2}, {0, 2}});
+std::cout << view.isContiguous();  // may be false
+
+// Clone creates contiguous copy
+NDArray Y = view.clone();
+std::cout << Y.isContiguous();  // true
+```
+
+### Notes
+- Base arrays created by the constructor are always contiguous
+- Slices may or may not be contiguous depending on the slice parameters
+- Some operations (like `reshape`) require contiguous arrays
+- `clone()` always produces a contiguous result

@@ -1,0 +1,232 @@
+---
+title: 'Initialization Methods'
+description: 'Filling arrays with values'
+---
+
+## zeros
+
+Set all elements to 0.
+
+### Signature
+```cpp
+void zeros()
+```
+
+### Parameters
+None.
+
+### Returns
+Void.
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.zeros();
+
+X.print();
+// [[0, 0, 0],
+//  [0, 0, 0]]
+```
+
+---
+
+## ones
+
+Set all elements to 1.
+
+### Signature
+```cpp
+void ones()
+```
+
+### Parameters
+None.
+
+### Returns
+Void.
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.ones();
+
+X.print();
+// [[1, 1, 1],
+//  [1, 1, 1]]
+```
+
+---
+
+## fill
+
+Fill all elements with a constant value.
+
+### Signature
+```cpp
+void fill(float value)
+```
+
+### Parameters
+<ParamField path="value" type="float" required>
+  The constant value to fill the array with.
+</ParamField>
+
+### Returns
+Void.
+
+### Exceptions
+- **std::runtime_error** - if the array does not own its memory (e.g., a view/slice)
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.fill(7.5);
+
+X.print();
+// [[7.5, 7.5, 7.5],
+//  [7.5, 7.5, 7.5]]
+```
+
+---
+
+## rand (no parameters)
+
+Fill with uniform random float values in the range [0, 1).
+
+### Signature
+```cpp
+void rand()
+```
+
+### Parameters
+None.
+
+### Returns
+Void.
+
+### Exceptions
+- **std::runtime_error** - if the array does not own its memory
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.rand();
+
+X.print();
+// [[0.234, 0.891, 0.456],
+//  [0.123, 0.678, 0.912]]
+// (values will vary each run)
+```
+
+---
+
+## rand (with range)
+
+Fill with uniform random float values in the range [low, high).
+
+### Signature
+```cpp
+void rand(float low, float high)
+```
+
+### Parameters
+<ParamField path="low" type="float" required>
+  Inclusive lower bound of the range.
+</ParamField>
+
+<ParamField path="high" type="float" required>
+  Exclusive upper bound of the range.
+</ParamField>
+
+### Returns
+Void.
+
+### Exceptions
+- **std::invalid_argument** - if low >= high
+- **std::runtime_error** - if the array does not own its memory
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.rand(-1.0, 1.0);
+
+X.print();
+// [[-0.234, 0.567, -0.890],
+//  [0.123, -0.456, 0.789]]
+// (values between -1.0 and 1.0)
+```
+
+---
+
+## randint
+
+Fill with uniform random integer values in the range [low, high). Values are stored as floats but represent integers.
+
+### Signature
+```cpp
+void randint(int low, int high)
+```
+
+### Parameters
+<ParamField path="low" type="int" required>
+  Inclusive lower bound.
+</ParamField>
+
+<ParamField path="high" type="int" required>
+  Exclusive upper bound.
+</ParamField>
+
+### Returns
+Void.
+
+### Exceptions
+- **std::runtime_error** - if the array does not own its memory
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.randint(1, 10);
+
+X.print();
+// [[3, 7, 2],
+//  [8, 1, 5]]
+// (integer values between 1 and 9)
+```
+
+### Notes
+- Values are integers but stored as `float` type
+- Range is [low, high) - high is exclusive
+
+---
+
+## fillSequential
+
+Fill with sequential values starting from 0: 0, 1, 2, 3, ... Primarily used for demos and testing.
+
+### Signature
+```cpp
+void fillSequential()
+```
+
+### Parameters
+None.
+
+### Returns
+Void.
+
+### Exceptions
+- **std::runtime_error** - if the array does not own its memory
+
+### Example
+```cpp
+NDArray X({2, 3});
+X.fillSequential();
+
+X.print();
+// [[0, 1, 2],
+//  [3, 4, 5]]
+```
+
+### Notes
+- Fills in row-major order
+- Useful for testing and demonstrating indexing behavior
